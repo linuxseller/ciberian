@@ -211,41 +211,94 @@ Variable get_var_by_name(SView sv, Variables *variables, int64_t depth){
     return (Variable){0};
 }
 
+typedef struct {
+    enum {RPN_OPERATOR, RPN_NUM} type;
+    union {
+        Token oper;
+        int64_t numeric;
+    };
+} RpnObject;
+
+int OP_PREC[] = {
+    [TOKEN_OP_MUL]=4,
+    [TOKEN_OP_DIV]=3,
+    [TOKEN_OP_PLUS]=2,
+    [TOKEN_OP_MINUS]=1,
+};
+
 int64_t evaluate_num_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth){
-    if(expr_size<=0){return 0;}
+    RpnObject *stack = malloc(sizeof(RpnObject)*expr_size);
+    RpnObject *postfix = malloc(sizeof(RpnObject)*expr_size);
     int64_t value;
-    bool negate=false;
     Variable var;
-    switch(expr[expr_size-1].type){
-        case TOKEN_OP_MINUS:
-            negate = true;
-            expr++;
-        case TOKEN_NUMERIC:
-            value = SVTOL(expr[expr_size-1].sv);
-            value = (negate)?-value:value;
-            break;
-        case TOKEN_NAME:
-            var = get_var_by_name(expr[expr_size-1].sv, variables, depth);
-            value = get_num_value(var);
-            break;
-        default:
-            printloc(expr[expr_size-1].loc);
-            printf(" Error: unexpected token '%.*s'(type %s), expected variable or numeric\n", SVVARG(expr[expr_size-1].sv), TOKEN_TO_STR[expr[expr_size-1].type]);
-            exit(1);
+    int top=-1;
+    int j=0;
+    for(int i=0; i<expr_size; i++){
+        switch(expr[i].type){
+            case TOKEN_OP_DIV:
+            case TOKEN_OP_MUL:
+            case TOKEN_OP_PLUS:
+            case TOKEN_OP_MINUS:
+                while (top > -1 && OP_PREC[stack[top].type] >= OP_PREC[expr[i].type]){
+                    postfix[j++] = stack[top--];
+                }
+                stack[top+1].type=RPN_OPERATOR;
+                stack[top+1].oper.type = expr[i].type;
+                top++;
+                break;
+            case TOKEN_NUMERIC:
+                value = SVTOL(expr[i].sv);
+                postfix[j].type=RPN_NUM;
+                postfix[j].numeric=value;
+                j++;
+                break;
+            case TOKEN_NAME:
+                var = get_var_by_name(expr[i].sv, variables, depth);
+                value = get_num_value(var);
+                postfix[j].type=RPN_NUM;
+                postfix[j].numeric=value;
+                j++;
+                break;
+            default:break;
+        }
     }
-    int64_t prev_part = evaluate_num_expr(expr, expr_size-2, variables, depth);
-    switch(expr[expr_size-2].type){
-        case TOKEN_OP_PLUS:
-            return prev_part + value;
-        case TOKEN_OP_MINUS:
-            return prev_part - value;
-        case TOKEN_OP_MUL:
-            return prev_part * value;
-        case TOKEN_OP_DIV:
-            return prev_part / value;
-        default:
-            return value;
+    while (top > -1) {
+        postfix[j++] = stack[top--];
     }
+    top=0;
+    for(int i=0; i<j; i++){
+        /* switch(postfix[i].type){ */
+        /*     case RPN_OPERATOR: */
+        /*         printf("Operator: %s\n", TOKEN_TO_STR[postfix[i].oper.type]); */
+        /*         break; */
+        /*     default: */
+        /*         printf("Numeric: %zd\n", postfix[i].numeric); */
+        /*         break; */
+        /* } */
+        stack[top]=postfix[i];
+        if(stack[top].type==RPN_OPERATOR){
+            stack[top-2].type=RPN_NUM;
+            switch(stack[top].oper.type){
+                case TOKEN_OP_PLUS:
+                    stack[top-2].numeric = stack[top-1].numeric + stack[top-2].numeric;
+                    break;
+                case TOKEN_OP_MINUS:
+                    stack[top-2].numeric = stack[top-1].numeric - stack[top-2].numeric;
+                    break;
+                case TOKEN_OP_MUL:
+                    stack[top-2].numeric = stack[top-1].numeric * stack[top-2].numeric;
+                    break;
+                case TOKEN_OP_DIV:
+                    stack[top-2].numeric = stack[top-1].numeric / stack[top-2].numeric;
+                    break;
+                default:break;
+            }
+            top=top-2;
+        }
+        top++;
+    }
+    return stack[top].numeric;
+    free(stack);
 }
 
 bool evaluate_bool_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth){
@@ -613,7 +666,6 @@ int main(int argc, char **argv){
                 }
                 fn.body.depth = 1;
                 functions[hash(fn.name)%1024] = fn;
-                printf("%zu <- hash\n", hash(fn.name)%1024);
                 break;
             default:
                 printloc(token.loc);
