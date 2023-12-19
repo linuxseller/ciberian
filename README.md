@@ -40,7 +40,7 @@ Main Aims
  - [x] Variable Scoping
  - [x] If Else
  - [x] While loops
- - [ ] Functions
+ - [x] Functions
  - [ ] Proper math evaluation
  - [ ] IOlib
  - [ ] Strict Typecheking
