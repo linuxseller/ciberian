@@ -1,8 +1,16 @@
-fn main () : i8 {
-    i32 count = 1000;
-    while(count>0){
-        print count " - 7 = ";
-        count = count - 7;
-        print count "\n";
+fn fact(i32 n) : i32 {
+    i32 tmp = n-1;
+    while(tmp>0){
+        n=n*tmp;
+        tmp=tmp-1;
     }
+    return n;
+}
+
+fn add(i8 a, i8 b) : i8 {
+    return a+b;
+}
+
+fn main() : i8 {
+    fact(5,);
 }
