@@ -1,14 +1,15 @@
 fn fact(i32 n) : i32 {
+    print "factcall\n";
     i32 tmp = n-1;
     while(tmp>0){
         n=n*tmp;
         tmp=tmp-1;
     }
+    dprint n;
     return n;
 }
 
 fn main() : i8 {
-    i32 test = 10;
-    i32 abs = test-1+2*3;
-    dprint abs;
+    i8 result = 1+fact(5,); 
+    dprint result;
 }

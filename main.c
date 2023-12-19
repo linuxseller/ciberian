@@ -9,6 +9,24 @@
 #include "types.h"
 #include "lexer.c"
 
+void printloc(Location loc);
+void debug_token(Token token);
+void debug_variable(Variable variable);
+void debug_block(CodeBlock block);
+size_t hash(SView sv);
+void usage(char *program_name);
+char *args_shift(int *argc, char ***argv);
+enum TypeEnum parse_type(Lexer *lexer);
+enum TypeEnum token_variable_type(Token token);
+int get_type_size_in_bytes(enum TypeEnum type);
+void var_num_cast(Variable *var, int64_t src);
+Func parse_function(Lexer *lexer);
+int64_t get_num_value(Variable var);
+Variable get_var_by_name(SView sv, Variables *variables, int64_t depth);
+int64_t evaluate_num_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth);
+bool evaluate_bool_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth);
+int64_t evaluate_code_block(CodeBlock block);
+
 Func functions[1024]={0};
 void printloc(Location loc){
     printf("%s:%lu:%lu", loc.file_path, loc.row, loc.col);
@@ -27,6 +45,7 @@ void debug_variable(Variable variable){
     printf("Varible {\n");
     printf("\tname: %.*s\n", SVVARG(variable.name));
     printf("\ttype: %s\n", TYPE_TO_STR[variable.type]);
+    printf("\tvalue: %zd\n", get_num_value(variable));
     printf("}\n");
 }
 
@@ -127,7 +146,60 @@ int get_type_size_in_bytes(enum TypeEnum type){
            return -1; 
     }
 }
-
+void var_num_cast(Variable *var, int64_t src){
+    bool overflow = false;
+    bool underflow = false;
+    switch(var->type){
+        case TYPE_I8:
+            if(src>INT8_MAX){
+                overflow=true;
+                break;
+            } else if(src<INT8_MIN){
+                underflow=true;
+                break;
+            }
+            *(int8_t*)var->ptr = src;
+            break;
+        case TYPE_I32:
+            if(src>INT32_MAX){
+                overflow=true;
+                break;
+            } else if(src<INT32_MIN){
+                underflow=true;
+                break;
+            }
+            *(int32_t*)var->ptr = src;
+            break;
+        case TYPE_I64:
+            *(int64_t*)var->ptr = src;
+            break;
+        default:
+           printf("ERROR: i8 i32 i64 types supported\n");
+           exit(1);
+    }
+    if(overflow||underflow){
+        printf("Error on assignation, %s %s in (tryed assigning %zd to '%.*s')\n",
+                TYPE_TO_STR[var->type],
+                (underflow)?"underflow":"overflow",
+                src, SVVARG(var->name));
+        if(verbose){
+            printf("Type %s value range is ", TYPE_TO_STR[var->type]);
+            switch(var->type){
+                case TYPE_I8:
+                    printf("[%d;%d]\n", INT8_MIN, INT8_MAX);
+                    break;
+                case TYPE_I32:
+                    printf("[%d;%d]\n", INT32_MIN, INT32_MAX);
+                    break;
+                case TYPE_I64:
+                    printf("[%zu;%zu]\n", INT64_MIN, INT64_MAX);
+                    break;
+                default:break;
+            }
+        }
+        exit(1);
+    }
+}
 Func parse_function(Lexer *lexer){
     Func func = {0};
     Token token = next_token(lexer);
@@ -253,12 +325,56 @@ int64_t evaluate_num_expr(Token *expr, int64_t expr_size, Variables *variables, 
                 j++;
                 break;
             case TOKEN_NAME:
-                var = get_var_by_name(expr[i].sv, variables, depth);
-                value = get_num_value(var);
-                postfix[j].type=RPN_NUM;
-                postfix[j].numeric=value;
-                j++;
-                break;
+                {
+                    var = get_var_by_name(expr[i].sv, variables, depth);
+                    if(var.name.data!=NULL){
+                        value = get_num_value(var);
+                        postfix[j].type=RPN_NUM;
+                        postfix[j].numeric=value;
+                        j++;
+                        break;
+                    }
+                    Token fn_token = expr[i];
+                    Token token = expr[++i];
+                    if(token.type!=TOKEN_OPAREN){
+                        TOKENERROR(" Error: you probably skipped '()' when function call. Otherwise you are f@cked up. Got ")
+                    }
+                    token = expr[++i];
+                    Func fn_to_call = functions[hash(fn_token.sv)%1024];
+                    fn_to_call.body.variables[1].varc=0;
+                    for(size_t j=0; j<fn_to_call.argc; j++){
+                        Token *arg_expr_start = &expr[i];
+                        int arg_exprc = 0;
+                        while(token.type!=TOKEN_COMMA){
+                            if(token.type==TOKEN_CPAREN){
+                                TOKENERROR(" Error: uhhm, bruh. You forgor some arguments ")
+                            }
+                            token = expr[++i];
+                            arg_exprc++;
+                        }
+                        token = expr[++i];
+                        int64_t argument_value = evaluate_num_expr(arg_expr_start, arg_exprc, variables, depth);
+                        printf("argval %zd\n", argument_value);
+                        Variable var;
+                        var.name = fn_to_call.args[j].name;
+                        var.type = fn_to_call.args[j].type;
+                        var.ptr = malloc(get_type_size_in_bytes(var.type));
+                        var_num_cast(&var, argument_value);
+                        fn_to_call.body.variables[1].variables[j] = var; 
+                        fn_to_call.body.variables[1].varc++;
+                        fn_to_call.body.depth=1;
+                    }
+                    if(fn_to_call.name.data == NULL){
+                        TOKENERROR(" Error: unknown directive ");
+                    }
+                    while(token.type!=TOKEN_SEMICOLON){
+                        token = expr[++i];
+                    }
+                    postfix[j].type=RPN_NUM;
+                    postfix[j].numeric=evaluate_code_block(fn_to_call.body);
+                    j++;
+                    break;
+                }
             default:break;
         }
     }
@@ -283,13 +399,13 @@ int64_t evaluate_num_expr(Token *expr, int64_t expr_size, Variables *variables, 
                     stack[top-2].numeric = stack[top-1].numeric + stack[top-2].numeric;
                     break;
                 case TOKEN_OP_MINUS:
-                    stack[top-2].numeric = stack[top-1].numeric - stack[top-2].numeric;
+                    stack[top-2].numeric = stack[top-2].numeric - stack[top-1].numeric;
                     break;
                 case TOKEN_OP_MUL:
                     stack[top-2].numeric = stack[top-1].numeric * stack[top-2].numeric;
                     break;
                 case TOKEN_OP_DIV:
-                    stack[top-2].numeric = stack[top-1].numeric / stack[top-2].numeric;
+                    stack[top-2].numeric = stack[top-2].numeric / stack[top-1].numeric;
                     break;
                 default:break;
             }
@@ -297,7 +413,8 @@ int64_t evaluate_num_expr(Token *expr, int64_t expr_size, Variables *variables, 
         }
         top++;
     }
-    return stack[top].numeric;
+    /* printf("RETURNING %zd\n", stack[top].numeric); */
+    return stack[top-1].numeric;
     free(stack);
 }
 
@@ -323,60 +440,7 @@ bool evaluate_bool_expr(Token *expr, int64_t expr_size, Variables *variables, si
     return false;
 }
 
-void var_num_cast(Variable *var, int64_t src){
-    bool overflow = false;
-    bool underflow = false;
-    switch(var->type){
-        case TYPE_I8:
-            if(src>INT8_MAX){
-                overflow=true;
-                break;
-            } else if(src<INT8_MIN){
-                underflow=true;
-                break;
-            }
-            *(int8_t*)var->ptr = src;
-            break;
-        case TYPE_I32:
-            if(src>INT32_MAX){
-                overflow=true;
-                break;
-            } else if(src<INT32_MIN){
-                underflow=true;
-                break;
-            }
-            *(int32_t*)var->ptr = src;
-            break;
-        case TYPE_I64:
-            *(int64_t*)var->ptr = src;
-            break;
-        default:
-           printf("ERROR: i8 i32 i64 types supported\n");
-           exit(1);
-    }
-    if(overflow||underflow){
-        printf("Error on assignation, %s %s in (tryed assigning %zd to '%.*s')\n",
-                TYPE_TO_STR[var->type],
-                (underflow)?"underflow":"overflow",
-                src, SVVARG(var->name));
-        if(verbose){
-            printf("Type %s value range is ", TYPE_TO_STR[var->type]);
-            switch(var->type){
-                case TYPE_I8:
-                    printf("[%d;%d]\n", INT8_MIN, INT8_MAX);
-                    break;
-                case TYPE_I32:
-                    printf("[%d;%d]\n", INT32_MIN, INT32_MAX);
-                    break;
-                case TYPE_I64:
-                    printf("[%zu;%zu]\n", INT64_MIN, INT64_MAX);
-                    break;
-                default:break;
-            }
-        }
-        exit(1);
-    }
-}
+
 
 int64_t evaluate_code_block(CodeBlock block){
     int64_t ret=0;
@@ -412,7 +476,8 @@ int64_t evaluate_code_block(CodeBlock block){
                                 token = block.code[++i];
                                 expr_size++;
                             }
-                            var_num_cast(&var, evaluate_num_expr(expr_start, expr_size, block.variables, block.depth));
+                            int64_t val =evaluate_num_expr(expr_start, expr_size, block.variables, block.depth); 
+                            var_num_cast(&var, val);
                             size_t varc = block.variables[block.depth].varc;
                             block.variables[block.depth].variables[varc] = var;
                             if(new_var){
