@@ -114,6 +114,9 @@ enum TypeEnum token_variable_type(Token token){
     } else if(SVCMP(token.sv, "i32")==0){
         type = TYPE_I32;
     } else if(SVCMP(token.sv, "i64")==0){
+        if(sizeof(size_t)!=sizeof(int64_t)){
+            TOKENERROR(" Error: i64 not supported on this architecture");
+        }
         type = TYPE_I64;
     } else if(SVCMP(token.sv, "u8")==0){
         type = TYPE_U8;
@@ -126,6 +129,7 @@ enum TypeEnum token_variable_type(Token token){
     } else {
         type = TYPE_NOT_A_TYPE;
     }
+    
     return type; 
 }
 
@@ -347,9 +351,8 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
                     Func fn_to_call = functions[hash(fn_token.sv)%1024];
                     fn_to_call.body.variables=malloc(sizeof(Variables)*10);
                     for(int i = 0; i<10; i++){
-                        fn_to_call.body.variables[i].variables = malloc(sizeof(Variable)*10);
+                        fn_to_call.body.variables[i].varc = 0;
                     }
-                    fn_to_call.body.variables[1].varc = 0;
                     for(size_t j = 0; j<fn_to_call.argc; j++){
                         Token *arg_expr_start = &expr[i];
                         int arg_exprc = 0;
@@ -367,6 +370,12 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
                         var.type = fn_to_call.args[j].type;
                         var.ptr = malloc(get_type_size_in_bytes(var.type));
                         var_num_cast(&var, argument_value);
+                        if(variables[depth].varc == 0){
+                            fn_to_call.body.variables[1].variables = malloc(sizeof(Variable));
+                        } else {
+                            fn_to_call.body.variables[1].variables =
+                                realloc(fn_to_call.body.variables[1].variables, sizeof(Variable)*(fn_to_call.body.variables[1].varc+1));
+                        }
                         fn_to_call.body.variables[1].variables[j] = var; 
                         fn_to_call.body.variables[1].varc++;
                         fn_to_call.body.depth = 1;
@@ -421,27 +430,54 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
         top++;
     }
     /* printf("RETURNING %zd\n", stack[top].numeric); */
-    return stack[top-1].numeric;
+    int64_t rval = stack[top-1].numeric;
     free(stack);
+    free(postfix);
+    return rval;
 }
 
 bool evaluate_bool_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth){
     if(expr_size <= 0){return 0;}
     int64_t left_expr_size = 0;
-    while(expr[left_expr_size].type != TOKEN_OP_LESS && expr[left_expr_size].type != TOKEN_OP_GREATER && expr[left_expr_size].type != TOKEN_OP_NOT){
+    while(expr[left_expr_size].type != TOKEN_OP_LESS && expr[left_expr_size].type != TOKEN_OP_GREATER
+            && expr[left_expr_size].type != TOKEN_OP_NOT && expr[left_expr_size].type != TOKEN_OP_NOT
+            && expr[left_expr_size].type != TOKEN_EQUAL_SIGN){
         left_expr_size++;
     }
     enum TokenEnum token_op = expr[left_expr_size].type;
+    Token token_op_next = expr[left_expr_size+1];
+    /* int eqsn=0; */
+    /* if(token_op_next.type==TOKEN_EQUAL_SIGN){ */
+    /*     eqsn=1; */
+    /* } */
     int64_t right_expr_size = expr_size-left_expr_size-1;
     int64_t left_value = evaluate_expr(expr, left_expr_size, variables, depth);
     int64_t right_value = evaluate_expr(expr+left_expr_size+1, right_expr_size, variables, depth);
     switch(token_op){
         case TOKEN_OP_LESS:
+            if(token_op_next.type!=TOKEN_EQUAL_SIGN){
+                return left_value<=right_value;
+            }
             return left_value < right_value;
         case TOKEN_OP_GREATER:
+            if(token_op_next.type!=TOKEN_EQUAL_SIGN){
+                return left_value>=right_value;
+            }
             return left_value>right_value;
         case TOKEN_OP_NOT:
+            if(token_op_next.type!=TOKEN_EQUAL_SIGN){
+                printloc(token_op_next.loc);
+                printf(" Error: expected '!=', got !%.*s\n", SVVARG(token_op_next.sv));
+                exit(1);
+            }
             return left_value != right_value;
+        case TOKEN_EQUAL_SIGN:
+            if(token_op_next.type!=TOKEN_EQUAL_SIGN){
+                printloc(token_op_next.loc);
+                printf(" Error: assignation on condition, expected '==', got =%.*s\n", SVVARG(token_op_next.sv));
+                exit(1);
+            }
+            return left_value == right_value;
         default:break;
     }
     return false;
@@ -467,6 +503,12 @@ CBReturn evaluate_code_block(CodeBlock block){
                             var.name = token.sv;
                             var.ptr  = malloc(get_type_size_in_bytes(var.type));
                             new_var = true;
+                            if(block.variables[block.depth].varc == 0){
+                                block.variables[block.depth].variables = malloc(sizeof(Variable));
+                            } else {
+                                block.variables[block.depth].variables =
+                                    realloc(block.variables[block.depth].variables, sizeof(Variable)*(block.variables[block.depth].varc+1));
+                            }
                         } else {
                             var = get_var_by_name(token.sv, block.variables, block.depth);
                         }
@@ -484,12 +526,15 @@ CBReturn evaluate_code_block(CodeBlock block){
                                 token = block.code[++i];
                                 expr_size++;
                             }
-                            int64_t val  = evaluate_expr(expr_start, expr_size, block.variables, block.depth); 
+                            int64_t val = evaluate_expr(expr_start, expr_size, block.variables, block.depth); 
                             var_num_cast(&var, val);
                             size_t varc = block.variables[block.depth].varc;
-                            block.variables[block.depth].variables[varc] = var;
+                            
                             if(new_var){
+                                
+                                block.variables[block.depth].variables[varc] = var;
                                 block.variables[block.depth].varc++;
+                            }else{
                             }
                         } else if(token.type == TOKEN_SEMICOLON){
                             var_num_cast(&var, 0);
@@ -537,13 +582,11 @@ CBReturn evaluate_code_block(CodeBlock block){
                                     printf("%ld", SVTOL(token.sv));
                                     break;
                                 default:
-                                    printloc(token.loc);
-                                    printf(" Error: Unreachble.\n");
-                                    exit(1);
+                                    TOKENERROR(" Error: You dumbass forgot semicolon");
                             }
                             token = block.code[++i];
                         }
-                    }  else if(SVCMP(token.sv, "dprint") == 0) {
+                    } else if(SVCMP(token.sv, "dprint") == 0) {
                         token = block.code[++i];
                         while(token.type != TOKEN_SEMICOLON){
                             switch(token.type){
@@ -558,6 +601,26 @@ CBReturn evaluate_code_block(CodeBlock block){
                             }
                             token = block.code[++i];
                         }
+                    }else if(SVCMP(token.sv, "readlnTo") == 0) {
+                        token = block.code[++i];
+                        int mlced=256;
+                        char *str_input=malloc(mlced);
+                        char *str_input_copy=str_input;
+                        fgets(str_input, mlced, stdin);
+                        while(token.type != TOKEN_SEMICOLON){
+                            switch(token.type){
+                                case TOKEN_NAME:{
+                                    int64_t scanned = strtol(str_input, &str_input, 10);
+                                    Variable var = get_var_by_name(token.sv, block.variables, block.depth);
+                                    var_num_cast(&var, scanned);
+                                    break;
+                                }
+                                default:
+                                    TOKENERROR(" Error: 'readTo' supports only variables, got ");
+                            }
+                            token = block.code[++i];
+                        }
+                        free(str_input_copy);
                     }else {
                         TOKENERROR(" eror ");
                     }
@@ -578,20 +641,25 @@ CBReturn evaluate_code_block(CodeBlock block){
                     }
                     bool if_true = evaluate_bool_expr(expr_start, exprc, block.variables, block.depth);
                     if(!if_true){ // skip if block
-                        while(token.type != TOKEN_CCURLY){
+                       
+                       for(int depth_level = 0; token.type != TOKEN_CCURLY || depth_level>0;){
                             token = block.code[++i];
+                            switch(token.type){
+                                case TOKEN_OCURLY:depth_level++;break;
+                                case TOKEN_CCURLY:depth_level--;break;
+                                default:break;
+                            }
                         }
                     }
                     // if block, else, just code
                     if(if_true || block.code[i+1].type == TOKEN_ELSE){
-                        token = block.code[++i];
-                        token = block.code[++i];
-                        if(token.type == TOKEN_OCURLY){
+                        while(token.type != TOKEN_OCURLY){
                             token = block.code[++i];
                         }
+                        token = block.code[++i];
                         Token *expr_start = &block.code[i];
                         int exprc = 0;
-                        for(int depth_level = 0; token.type != TOKEN_CCURLY || depth_level>0;){
+                        for(int depth_level = 1; token.type != TOKEN_CCURLY || depth_level>0;){
                             token = block.code[++i];
                             exprc++;
                             switch(token.type){
@@ -608,13 +676,15 @@ CBReturn evaluate_code_block(CodeBlock block){
                                     .variables = block.variables,
                                     .depth = block.depth+1}
                                     );
-                        if(ret.returned){
-                            goto eval_ret;
-                        }
+                        /* debug_token(block.code[i+1]); */
                         if(block.code[i+1].type == TOKEN_ELSE){ // skip else block
                             while(block.code[i+1].type != TOKEN_CCURLY){
+                                /* debug_token(token); */
                                 token = block.code[++i];
                             }
+                        }
+                        if(ret.returned){
+                            goto eval_ret;
                         }
                     }
                 }
@@ -634,7 +704,6 @@ CBReturn evaluate_code_block(CodeBlock block){
                     }
                     token = block.code[++i];
                     Token *while_block_start = &block.code[++i];
-                    // START WHILE SOMEWHERE HERE
                     bool if_true = evaluate_bool_expr(while_expr_start, while_expr_exprc, block.variables, block.depth);
                     if(!if_true){ // skip while block
                         while(token.type != TOKEN_CCURLY){
@@ -739,7 +808,6 @@ int main(int argc, char **argv){
                 fn = parse_function(&lexer);
                 fn.body.variables = malloc(sizeof(Variables)*10);
                 for(int i = 0; i<10; i++){
-                    fn.body.variables[i].variables = calloc(sizeof(Variable),10);
                     fn.body.variables[i].varc = 0;
                 }
                 fn.body.depth = 1;
@@ -755,10 +823,10 @@ int main(int argc, char **argv){
     fn.body.depth = 1;
     evaluate_code_block(fn.body);
     // FREE !!!
-    for(int i = 0; i<10; i++){
-        free(fn.body.variables[i].variables);
-    }
-    free(fn.body.variables);
+    /* for(int i = 0; i<10; i++){ */
+    /*     free(fn.body.variables[i].variables); */
+    /* } */
+    /* free(fn.body.variables); */
     free(fn.args);
     free(fn.body.code);
     free(code_src);

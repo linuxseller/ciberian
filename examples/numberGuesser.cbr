@@ -1,7 +1,7 @@
 fn main() : i8 {
     i64 input;
     i8 tries;
-    i64 a=174;
+    i64 a=50;
     print "Hello, gues a numba between 1 and 99\n";
     while(tries!=3){
         print "Input try[" tries "/3]: ";

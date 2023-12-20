@@ -30,15 +30,17 @@ enum TypeEnum {
 };
 
 char *TYPE_TO_STR[]={
-    [TYPE_I8]="i8",
-    [TYPE_I32]="i32",
-    [TYPE_I64]="i64",
-    [TYPE_STRING]="string"
+    [TYPE_I8     ] = "i8",
+    [TYPE_I32    ] = "i32",
+    [TYPE_I64    ] = "i64",
+    [TYPE_STRING ] = "string"
 };
+
 typedef struct {
     bool returned; 
     int64_t value;
 } CBReturn;
+
 enum TokenEnum {
     TOKEN_FN_DECL,
     TOKEN_NAME,
@@ -67,30 +69,42 @@ enum TokenEnum {
 };
 
 char *TOKEN_TO_STR[] = {
-[TOKEN_FN_DECL      ] = "TOKEN_FN_DECL ",
-[TOKEN_NAME         ] = "TOKEN_NAME",
-[TOKEN_FN_CALL      ] = "TOKEN_FN_CALL ",
-[TOKEN_OCURLY       ] = "TOKEN_OCURLY",
-[TOKEN_CCURLY       ] = "TOKEN_CCURLY",
-[TOKEN_OPAREN       ] = "TOKEN_OPAREN",
-[TOKEN_CPAREN       ] = "TOKEN_CPAREN",
-[TOKEN_STR_LITERAL  ] = "TOKEN_STR_LITERAL ",
-[TOKEN_SEMICOLON    ] = "TOKEN_SEMICOLON ",
-[TOKEN_RETURN       ] = "TOKEN_RETURN",
-[TOKEN_RETURN_COLON ] = "TOKEN_RETURN_COLON",
-[TOKEN_COMMA        ] = "TOKEN_COMMA ",
-[TOKEN_NUMERIC      ] = "TOKEN_NUMERIC ",
-[TOKEN_EQUAL_SIGN   ] = "TOKEN_EQUAL_SIGN",
-[TOKEN_OP_DIV       ] = "TOKEN_OP_DIV",
-[TOKEN_OP_PLUS      ] = "TOKEN_OP_PLUS ",
-[TOKEN_OP_MINUS     ] = "TOKEN_OP_MINUS",
-[TOKEN_OP_MUL       ] = "TOKEN_OP_MUL",
-[TOKEN_OP_LESS      ] = "TOKEN_OP_LESS ",
-[TOKEN_OP_GREATER   ] = "TOKEN_OP_GREATER",
-[TOKEN_OP_NOT       ] = "TOKEN_OP_NOT",
-[TOKEN_IF           ] = "TOKEN_IF",
-[TOKEN_ELSE         ] = "TOKEN_ELSE",
-[TOKEN_WHILE        ] = "TOKEN_WHILE"
+    [TOKEN_FN_DECL      ] = "TOKEN_FN_DECL ",
+    [TOKEN_NAME         ] = "TOKEN_NAME",
+    [TOKEN_FN_CALL      ] = "TOKEN_FN_CALL ",
+    [TOKEN_OCURLY       ] = "TOKEN_OCURLY",
+    [TOKEN_CCURLY       ] = "TOKEN_CCURLY",
+    [TOKEN_OPAREN       ] = "TOKEN_OPAREN",
+    [TOKEN_CPAREN       ] = "TOKEN_CPAREN",
+    [TOKEN_STR_LITERAL  ] = "TOKEN_STR_LITERAL ",
+    [TOKEN_SEMICOLON    ] = "TOKEN_SEMICOLON ",
+    [TOKEN_RETURN       ] = "TOKEN_RETURN",
+    [TOKEN_RETURN_COLON ] = "TOKEN_RETURN_COLON",
+    [TOKEN_COMMA        ] = "TOKEN_COMMA ",
+    [TOKEN_NUMERIC      ] = "TOKEN_NUMERIC ",
+    [TOKEN_EQUAL_SIGN   ] = "TOKEN_EQUAL_SIGN",
+    [TOKEN_OP_DIV       ] = "TOKEN_OP_DIV",
+    [TOKEN_OP_PLUS      ] = "TOKEN_OP_PLUS ",
+    [TOKEN_OP_MINUS     ] = "TOKEN_OP_MINUS",
+    [TOKEN_OP_MUL       ] = "TOKEN_OP_MUL",
+    [TOKEN_OP_LESS      ] = "TOKEN_OP_LESS ",
+    [TOKEN_OP_GREATER   ] = "TOKEN_OP_GREATER",
+    [TOKEN_OP_NOT       ] = "TOKEN_OP_NOT",
+    [TOKEN_IF           ] = "TOKEN_IF",
+    [TOKEN_ELSE         ] = "TOKEN_ELSE",
+    [TOKEN_WHILE        ] = "TOKEN_WHILE"
+};
+
+enum ModifyerEnum {
+    MOD_NO_MOD,
+    MOD_PTR,
+    MOD_ARRAY
+};
+
+char *MOD_TO_STR[] = {
+    [MOD_NO_MOD ] = "MOD_NO_MOD",
+    [MOD_ARRAY  ] = "MOD_ARRAY",
+    [MOD_PTR    ] = "MOD_PTR"
 };
 
 typedef struct {
@@ -127,6 +141,7 @@ typedef struct {
     SView name;
     enum TypeEnum type;
     void *ptr;
+    enum ModifyerEnum modifyer;
 } Variable;
 
 typedef struct {

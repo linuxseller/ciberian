@@ -1,0 +1,12 @@
+fn fact(i32 n) : i32 {
+    if(2>n){
+        return 1;
+    }
+    return n*fact(n-1,);
+}
+
+fn main() : i8 {
+    i64 test=fact(5,);
+    dprint test;
+    return;
+}
