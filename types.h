@@ -35,7 +35,10 @@ char *TYPE_TO_STR[]={
     [TYPE_I64]="i64",
     [TYPE_STRING]="string"
 };
-
+typedef struct {
+    bool returned; 
+    int64_t value;
+} CBReturn;
 enum TokenEnum {
     TOKEN_FN_DECL,
     TOKEN_NAME,

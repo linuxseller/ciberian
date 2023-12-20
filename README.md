@@ -41,7 +41,7 @@ Main Aims
  - [x] If Else
  - [x] While loops
  - [x] Functions
- - [ ] Proper math evaluation
+ - [x] Proper math evaluation
  - [ ] IOlib
  - [ ] Strict Typecheking
 

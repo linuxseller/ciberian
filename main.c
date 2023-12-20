@@ -23,11 +23,13 @@ void var_num_cast(Variable *var, int64_t src);
 Func parse_function(Lexer *lexer);
 int64_t get_num_value(Variable var);
 Variable get_var_by_name(SView sv, Variables *variables, int64_t depth);
-int64_t evaluate_num_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth);
+int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth);
 bool evaluate_bool_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth);
-int64_t evaluate_code_block(CodeBlock block);
+CBReturn evaluate_code_block(CodeBlock block);
 
-Func functions[1024]={0};
+Func functions[1024] = {0};
+
+// print and debug functions
 void printloc(Location loc){
     printf("%s:%lu:%lu", loc.file_path, loc.row, loc.col);
 }
@@ -54,12 +56,14 @@ void debug_block(CodeBlock block){
     printf("\tdepth: %d\n", block.depth);
     printf("\texprc: %zu\n", block.exprc);
     printf("\tVariables: {\n");
-    for(size_t i=0; i<block.variables[block.depth].varc; i++){
+    for(size_t i = 0; i<block.variables[block.depth].varc; i++){
         debug_variable(block.variables[block.depth].variables[i]);
     }
     printf("}\n");
 }
+//Xprint and debug functions
 
+// Hash function for functions TODO: test for variables
 size_t hash(SView sv){
     size_t hash = 5381;
     int c;
@@ -71,18 +75,14 @@ size_t hash(SView sv){
     return hash;
 }
 
+// User Experience
 void usage(char *program_name){
     printf("usage: %s [flags] <filename.cbr>\n", program_name);
     printf("flags:\n");
     printf("\t--verbose : provides additional info\n");
 }
-
-char *args_shift(int *argc, char ***argv){
-    (*argc)--;
-    return *((*argv)++);
-}
-
-bool verbose=false;
+// verbose output on error
+bool verbose = false;
 
 enum TypeEnum parse_type(Lexer *lexer){
     Token token = next_token(lexer);
@@ -146,26 +146,28 @@ int get_type_size_in_bytes(enum TypeEnum type){
            return -1; 
     }
 }
+
+// Cast int to variable
 void var_num_cast(Variable *var, int64_t src){
     bool overflow = false;
     bool underflow = false;
     switch(var->type){
         case TYPE_I8:
             if(src>INT8_MAX){
-                overflow=true;
+                overflow = true;
                 break;
             } else if(src<INT8_MIN){
-                underflow=true;
+                underflow = true;
                 break;
             }
             *(int8_t*)var->ptr = src;
             break;
         case TYPE_I32:
             if(src>INT32_MAX){
-                overflow=true;
+                overflow = true;
                 break;
             } else if(src<INT32_MIN){
-                underflow=true;
+                underflow = true;
                 break;
             }
             *(int32_t*)var->ptr = src;
@@ -200,6 +202,8 @@ void var_num_cast(Variable *var, int64_t src){
         exit(1);
     }
 }
+
+
 Func parse_function(Lexer *lexer){
     Func func = {0};
     Token token = next_token(lexer);
@@ -216,7 +220,7 @@ Func parse_function(Lexer *lexer){
         if(token.type!=TOKEN_NAME){
             TOKENERROR(" Error: wanted variable name, got ");
         }
-        Var_signature vs = {.name=token.sv, .type=type};
+        Var_signature vs = {.name=token.sv, .type = type};
         func.args[func.argc] = vs;
         func.argc++;
         token = next_token(lexer);
@@ -234,13 +238,13 @@ Func parse_function(Lexer *lexer){
     }
     int depth_level = 1;
     func.body.code = malloc(sizeof(Token)*100);
-    for(int i=0, e=100; token.type!=TOKEN_CCURLY || depth_level>0; i++){
+    for(int i=0, e = 100; token.type!=TOKEN_CCURLY || depth_level>0; i++){
         if(i>=e){
             e+=50;
             func.body.code = realloc(func.body.code, e);
         }
         token = next_token(lexer);
-        func.body.code[i]=token;
+        func.body.code[i] = token;
         func.body.exprc++;
         switch(token.type){
             case TOKEN_OCURLY:depth_level++;break;
@@ -273,7 +277,7 @@ int64_t get_num_value(Variable var){
 
 Variable get_var_by_name(SView sv, Variables *variables, int64_t depth){
     while(depth>-1){
-        for(size_t i=0; i<variables[depth].varc; i++){
+        for(size_t i = 0; i<variables[depth].varc; i++){
             if(SVSVCMP(sv, variables[depth].variables[i].name) == 0){
                 return variables[depth].variables[i];
             }
@@ -292,20 +296,20 @@ typedef struct {
 } RpnObject;
 
 int OP_PREC[] = {
-    [TOKEN_OP_MUL]=4,
-    [TOKEN_OP_DIV]=3,
-    [TOKEN_OP_PLUS]=2,
-    [TOKEN_OP_MINUS]=1,
+    [TOKEN_OP_MUL] = 4,
+    [TOKEN_OP_DIV] = 3,
+    [TOKEN_OP_PLUS] = 2,
+    [TOKEN_OP_MINUS] = 1,
 };
 
-int64_t evaluate_num_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth){
+int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth){
     RpnObject *stack = malloc(sizeof(RpnObject)*expr_size);
     RpnObject *postfix = malloc(sizeof(RpnObject)*expr_size);
     int64_t value;
     Variable var;
-    int top=-1;
-    int j=0;
-    for(int i=0; i<expr_size; i++){
+    int top = -1;
+    int j = 0;
+    for(int i = 0; i<expr_size; i++){
         switch(expr[i].type){
             case TOKEN_OP_DIV:
             case TOKEN_OP_MUL:
@@ -341,20 +345,23 @@ int64_t evaluate_num_expr(Token *expr, int64_t expr_size, Variables *variables, 
                     }
                     token = expr[++i];
                     Func fn_to_call = functions[hash(fn_token.sv)%1024];
-                    fn_to_call.body.variables[1].varc=0;
-                    for(size_t j=0; j<fn_to_call.argc; j++){
+                    fn_to_call.body.variables=malloc(sizeof(Variables)*10);
+                    for(int i = 0; i<10; i++){
+                        fn_to_call.body.variables[i].variables = malloc(sizeof(Variable)*10);
+                    }
+                    fn_to_call.body.variables[1].varc = 0;
+                    for(size_t j = 0; j<fn_to_call.argc; j++){
                         Token *arg_expr_start = &expr[i];
                         int arg_exprc = 0;
-                        while(token.type!=TOKEN_COMMA){
-                            if(token.type==TOKEN_CPAREN){
+                        while(token.type != TOKEN_COMMA){
+                            if(token.type == TOKEN_CPAREN){
                                 TOKENERROR(" Error: uhhm, bruh. You forgor some arguments ")
                             }
                             token = expr[++i];
                             arg_exprc++;
                         }
                         token = expr[++i];
-                        int64_t argument_value = evaluate_num_expr(arg_expr_start, arg_exprc, variables, depth);
-                        printf("argval %zd\n", argument_value);
+                        int64_t argument_value = evaluate_expr(arg_expr_start, arg_exprc, variables, depth);
                         Variable var;
                         var.name = fn_to_call.args[j].name;
                         var.type = fn_to_call.args[j].type;
@@ -362,16 +369,16 @@ int64_t evaluate_num_expr(Token *expr, int64_t expr_size, Variables *variables, 
                         var_num_cast(&var, argument_value);
                         fn_to_call.body.variables[1].variables[j] = var; 
                         fn_to_call.body.variables[1].varc++;
-                        fn_to_call.body.depth=1;
+                        fn_to_call.body.depth = 1;
                     }
                     if(fn_to_call.name.data == NULL){
                         TOKENERROR(" Error: unknown directive ");
                     }
-                    while(token.type!=TOKEN_SEMICOLON){
+                    while(token.type != TOKEN_SEMICOLON){
                         token = expr[++i];
                     }
-                    postfix[j].type=RPN_NUM;
-                    postfix[j].numeric=evaluate_code_block(fn_to_call.body);
+                    postfix[j].type = RPN_NUM;
+                    postfix[j].numeric = evaluate_code_block(fn_to_call.body).value;
                     j++;
                     break;
                 }
@@ -381,8 +388,8 @@ int64_t evaluate_num_expr(Token *expr, int64_t expr_size, Variables *variables, 
     while (top > -1) {
         postfix[j++] = stack[top--];
     }
-    top=0;
-    for(int i=0; i<j; i++){
+    top = 0;
+    for(int i = 0; i<j; i++){
         /* switch(postfix[i].type){ */
         /*     case RPN_OPERATOR: */
         /*         printf("Operator: %s\n", TOKEN_TO_STR[postfix[i].oper.type]); */
@@ -391,9 +398,9 @@ int64_t evaluate_num_expr(Token *expr, int64_t expr_size, Variables *variables, 
         /*         printf("Numeric: %zd\n", postfix[i].numeric); */
         /*         break; */
         /* } */
-        stack[top]=postfix[i];
-        if(stack[top].type==RPN_OPERATOR){
-            stack[top-2].type=RPN_NUM;
+        stack[top] = postfix[i];
+        if(stack[top].type == RPN_OPERATOR){
+            stack[top-2].type = RPN_NUM;
             switch(stack[top].oper.type){
                 case TOKEN_OP_PLUS:
                     stack[top-2].numeric = stack[top-1].numeric + stack[top-2].numeric;
@@ -409,7 +416,7 @@ int64_t evaluate_num_expr(Token *expr, int64_t expr_size, Variables *variables, 
                     break;
                 default:break;
             }
-            top=top-2;
+            top = top-2;
         }
         top++;
     }
@@ -419,22 +426,22 @@ int64_t evaluate_num_expr(Token *expr, int64_t expr_size, Variables *variables, 
 }
 
 bool evaluate_bool_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth){
-    if(expr_size<=0){return 0;}
+    if(expr_size <= 0){return 0;}
     int64_t left_expr_size = 0;
-    while(expr[left_expr_size].type!=TOKEN_OP_LESS && expr[left_expr_size].type!=TOKEN_OP_GREATER && expr[left_expr_size].type!=TOKEN_OP_NOT){
+    while(expr[left_expr_size].type != TOKEN_OP_LESS && expr[left_expr_size].type != TOKEN_OP_GREATER && expr[left_expr_size].type != TOKEN_OP_NOT){
         left_expr_size++;
     }
     enum TokenEnum token_op = expr[left_expr_size].type;
     int64_t right_expr_size = expr_size-left_expr_size-1;
-    int64_t left_value = evaluate_num_expr(expr, left_expr_size, variables, depth);
-    int64_t right_value = evaluate_num_expr(expr+left_expr_size+1, right_expr_size, variables, depth);
+    int64_t left_value = evaluate_expr(expr, left_expr_size, variables, depth);
+    int64_t right_value = evaluate_expr(expr+left_expr_size+1, right_expr_size, variables, depth);
     switch(token_op){
         case TOKEN_OP_LESS:
             return left_value < right_value;
         case TOKEN_OP_GREATER:
             return left_value>right_value;
         case TOKEN_OP_NOT:
-            return left_value!=right_value;
+            return left_value != right_value;
         default:break;
     }
     return false;
@@ -442,48 +449,49 @@ bool evaluate_bool_expr(Token *expr, int64_t expr_size, Variables *variables, si
 
 
 
-int64_t evaluate_code_block(CodeBlock block){
-    int64_t ret=0;
-    for(size_t i=0; i<block.exprc; i++){
+bool function_return = false;
+CBReturn evaluate_code_block(CodeBlock block){
+    CBReturn ret = {0};
+    for(size_t i = 0; i<block.exprc; i++){
         Token token = block.code[i];
         switch(token.type){
             case TOKEN_NAME:
                 {
                     if(token_variable_type(token) != TYPE_NOT_A_TYPE
-                        || get_var_by_name(token.sv, block.variables, block.depth).ptr!=NULL){ 
+                        || get_var_by_name(token.sv, block.variables, block.depth).ptr != NULL){ 
                         Variable var = {0};
-                        bool new_var=false;
-                        if(token_variable_type(token)!=TYPE_NOT_A_TYPE){
+                        bool new_var = false;
+                        if(token_variable_type(token) != TYPE_NOT_A_TYPE){
                             var.type = token_variable_type(token);
                             token    = block.code[++i];
                             var.name = token.sv;
                             var.ptr  = malloc(get_type_size_in_bytes(var.type));
-                            new_var=true;
+                            new_var = true;
                         } else {
                             var = get_var_by_name(token.sv, block.variables, block.depth);
                         }
-                        if(var.type==TYPE_STRING){
+                        if(var.type == TYPE_STRING){
                             printloc(token.loc);
                             printf(" Error: strings are unsupported\n");
                             exit(1);
                         }
                         token = block.code[++i];
-                        if(token.type==TOKEN_EQUAL_SIGN){
+                        if(token.type == TOKEN_EQUAL_SIGN){
                             token = block.code[++i];
-                            int expr_size=0;
-                            Token *expr_start=&block.code[i];
-                            while(token.type!=TOKEN_SEMICOLON){
+                            int expr_size = 0;
+                            Token *expr_start = &block.code[i];
+                            while(token.type != TOKEN_SEMICOLON){
                                 token = block.code[++i];
                                 expr_size++;
                             }
-                            int64_t val =evaluate_num_expr(expr_start, expr_size, block.variables, block.depth); 
+                            int64_t val  = evaluate_expr(expr_start, expr_size, block.variables, block.depth); 
                             var_num_cast(&var, val);
                             size_t varc = block.variables[block.depth].varc;
                             block.variables[block.depth].variables[varc] = var;
                             if(new_var){
                                 block.variables[block.depth].varc++;
                             }
-                        } else if(token.type==TOKEN_SEMICOLON){
+                        } else if(token.type == TOKEN_SEMICOLON){
                             var_num_cast(&var, 0);
                             size_t varc = block.variables[block.depth].varc;
                             block.variables[block.depth].variables[varc] = var;
@@ -491,17 +499,39 @@ int64_t evaluate_code_block(CodeBlock block){
                                 block.variables[block.depth].varc++;
                             }
                         } else {
-                            TOKENERROR(" Error: expected '=' or ';', got ");
+                            TOKENERROR(" Error: expected ' = ' or ';', got ");
                         }
                     } else if(SVCMP(token.sv, "print") == 0) {
                         token = block.code[++i];
-                        while(token.type!=TOKEN_SEMICOLON){
+                        while(token.type != TOKEN_SEMICOLON){
                             switch(token.type){
                                 case(TOKEN_STR_LITERAL):
                                     printf("%.*s", SVVARG(token.sv));
                                     break;
                                 case TOKEN_NAME:
-                                    printf("%zd", get_num_value(get_var_by_name(token.sv, block.variables, block.depth)));
+                                    {
+                                        Variable var = get_var_by_name(token.sv, block.variables, block.depth);
+                                        if(var.name.data!=NULL){ // if token is variable, get numeric of value and exit
+                                            printf("%zd", get_num_value(var));
+                                            break;
+                                        }
+                                        // if token is not var name, then it should be function
+                                        // so we will grep fucntion call and call it a day
+                                        Token *expr_start = &block.code[i];
+                                        int exprc=0;
+                                        for(int depth_level=0; token.type!=TOKEN_CPAREN && depth_level!=0;){
+                                            token = block.code[++i];
+                                            printf("d_level %d\n", depth_level);
+                                            exprc++;
+                                            switch(token.type){
+                                                case TOKEN_OPAREN:depth_level++;break;
+                                                case TOKEN_CPAREN:depth_level--;break;
+                                                default:break;
+                                            }   
+                                        }
+                                        int64_t tmp = evaluate_expr(expr_start, exprc, block.variables, block.depth);
+                                        printf("%zd", tmp);
+                                    }
                                     break;
                                 case TOKEN_NUMERIC:
                                     printf("%ld", SVTOL(token.sv));
@@ -515,7 +545,7 @@ int64_t evaluate_code_block(CodeBlock block){
                         }
                     }  else if(SVCMP(token.sv, "dprint") == 0) {
                         token = block.code[++i];
-                        while(token.type!=TOKEN_SEMICOLON){
+                        while(token.type != TOKEN_SEMICOLON){
                             switch(token.type){
                                 case TOKEN_NAME:
                                     printf("%s %.*s = %zd\n",
@@ -528,76 +558,40 @@ int64_t evaluate_code_block(CodeBlock block){
                             }
                             token = block.code[++i];
                         }
-                    }else { // function call
-                        Token fn_token = token;
-                        token = block.code[++i];
-                        if(token.type!=TOKEN_OPAREN){
-                            TOKENERROR(" Error: you probably skipped '()' when function call. Otherwise you are f@cked up. Got ")
-                        }
-                        token = block.code[++i];
-                        Func fn_to_call = functions[hash(fn_token.sv)%1024];
-                        fn_to_call.body.variables[1].varc=0;
-                        for(size_t j=0; j<fn_to_call.argc; j++){
-                            Token *arg_expr_start = &block.code[i];
-                            int arg_exprc = 0;
-                            while(token.type!=TOKEN_COMMA){
-                                if(token.type==TOKEN_CPAREN){
-                                    TOKENERROR(" Error: uhhm, bruh. You forgor some arguments ")
-                                }
-                                token = block.code[++i];
-                                arg_exprc++;
-                            }
-                            token = block.code[++i];
-                            int64_t argument_value = evaluate_num_expr(arg_expr_start, arg_exprc, block.variables, block.depth);
-                            Variable var;
-                            var.name = fn_to_call.args[j].name;
-                            var.type = fn_to_call.args[j].type;
-                            var.ptr = malloc(get_type_size_in_bytes(var.type));
-                            var_num_cast(&var, argument_value);
-                            fn_to_call.body.variables[1].variables[j] = var; 
-                            fn_to_call.body.variables[1].varc++;
-                            fn_to_call.body.depth=1;
-                        }
-                        if(fn_to_call.name.data == NULL){
-                            TOKENERROR(" Error: unknown directive ");
-                        }
-                        while(token.type!=TOKEN_SEMICOLON){
-                            token = block.code[++i];
-                        }
-                        printf("%zd\n", evaluate_code_block(fn_to_call.body));
-
+                    }else {
+                        TOKENERROR(" eror ");
                     }
                 }
                 break;
             case TOKEN_IF:
                 {
                     token = block.code[++i];
-                    if(token.type!=TOKEN_OPAREN){
+                    if(token.type != TOKEN_OPAREN){
                         TOKENERROR(" Error, expected '(', got ");
                     }
                     token = block.code[++i];
-                    Token *expr_start=&block.code[i];
-                    int exprc=0;
-                    while(token.type!=TOKEN_CPAREN){
+                    Token *expr_start = &block.code[i];
+                    int exprc = 0;
+                    while(token.type != TOKEN_CPAREN){
                         token = block.code[++i];
                         exprc++;
                     }
                     bool if_true = evaluate_bool_expr(expr_start, exprc, block.variables, block.depth);
                     if(!if_true){ // skip if block
-                        while(token.type!=TOKEN_CCURLY){
+                        while(token.type != TOKEN_CCURLY){
                             token = block.code[++i];
                         }
                     }
                     // if block, else, just code
-                    if(if_true || block.code[i+1].type==TOKEN_ELSE){
+                    if(if_true || block.code[i+1].type == TOKEN_ELSE){
                         token = block.code[++i];
                         token = block.code[++i];
-                        if(token.type==TOKEN_OCURLY){
+                        if(token.type == TOKEN_OCURLY){
                             token = block.code[++i];
                         }
-                        Token *expr_start=&block.code[i];
-                        int exprc=0;
-                        for(int depth_level=0; token.type!=TOKEN_CCURLY || depth_level>0;){
+                        Token *expr_start = &block.code[i];
+                        int exprc = 0;
+                        for(int depth_level = 0; token.type != TOKEN_CCURLY || depth_level>0;){
                             token = block.code[++i];
                             exprc++;
                             switch(token.type){
@@ -606,15 +600,19 @@ int64_t evaluate_code_block(CodeBlock block){
                                 default:break;
                             }
                         }
-                        evaluate_code_block(
+                        // HERE 1
+                        ret = evaluate_code_block(
                                 (CodeBlock){
-                                    .code=expr_start,
-                                    .exprc=exprc,
-                                    .variables=block.variables,
-                                    .depth=block.depth+1}
+                                    .code = expr_start,
+                                    .exprc = exprc,
+                                    .variables = block.variables,
+                                    .depth = block.depth+1}
                                     );
-                        if(block.code[i+1].type==TOKEN_ELSE){ // skip else block
-                            while(block.code[i+1].type!=TOKEN_CCURLY){
+                        if(ret.returned){
+                            goto eval_ret;
+                        }
+                        if(block.code[i+1].type == TOKEN_ELSE){ // skip else block
+                            while(block.code[i+1].type != TOKEN_CCURLY){
                                 token = block.code[++i];
                             }
                         }
@@ -624,13 +622,13 @@ int64_t evaluate_code_block(CodeBlock block){
             case TOKEN_WHILE:
                 {
                     token = block.code[++i];
-                    if(token.type!=TOKEN_OPAREN){
+                    if(token.type != TOKEN_OPAREN){
                         TOKENERROR(" Error, expected '(', got ");
                     }
                     token = block.code[++i];
-                    Token *while_expr_start=&block.code[i];
-                    int while_expr_exprc=0;
-                    while(token.type!=TOKEN_CPAREN){
+                    Token *while_expr_start = &block.code[i];
+                    int while_expr_exprc = 0;
+                    while(token.type != TOKEN_CPAREN){
                         token = block.code[++i];
                         while_expr_exprc++;
                     }
@@ -639,13 +637,13 @@ int64_t evaluate_code_block(CodeBlock block){
                     // START WHILE SOMEWHERE HERE
                     bool if_true = evaluate_bool_expr(while_expr_start, while_expr_exprc, block.variables, block.depth);
                     if(!if_true){ // skip while block
-                        while(token.type!=TOKEN_CCURLY){
+                        while(token.type != TOKEN_CCURLY){
                             token = block.code[++i];
                         }
                     }
                     if(if_true){
-                        int exprc=0;
-                        for(int depth_level=1; token.type!=TOKEN_CCURLY || depth_level>0;){
+                        int exprc = 0;
+                        for(int depth_level = 1; token.type != TOKEN_CCURLY || depth_level>0;){
                             token = block.code[++i];
                             exprc++;
                             switch(token.type){
@@ -655,26 +653,34 @@ int64_t evaluate_code_block(CodeBlock block){
                             }
                         }
                         while(evaluate_bool_expr(while_expr_start, while_expr_exprc, block.variables, block.depth)){
-                            evaluate_code_block(
+                            ret = evaluate_code_block(
                                     (CodeBlock){
-                                        .code=while_block_start,
-                                        .exprc=exprc,
-                                        .variables=block.variables,
-                                        .depth=block.depth+1,
+                                        .code = while_block_start,
+                                        .exprc = exprc,
+                                        .variables = block.variables,
+                                        .depth = block.depth+1,
                                         });
+                            if(ret.returned){
+                                goto eval_ret;
+                            }
                         }
                     }
                 }
                 break;
             case TOKEN_RETURN:
+                function_return=true;
                 token = block.code[++i];
-                Token *expr_start=&block.code[i];
-                size_t exprc=0;
-                while(token.type!=TOKEN_SEMICOLON){
+                Token *expr_start = &block.code[i];
+                size_t exprc = 0;
+                while(token.type != TOKEN_SEMICOLON){
                     token = block.code[++i];
                     exprc++;
                 }
-                ret = evaluate_num_expr(expr_start, exprc, block.variables, block.depth);
+                ret.value = evaluate_expr(expr_start, exprc, block.variables, block.depth);
+                ret.returned = true;
+                while(block.variables[block.depth].varc--){
+                    free(block.variables[block.depth].variables[block.variables[block.depth].varc].ptr);
+                }
                 goto eval_ret;
                 break;
             case TOKEN_CCURLY:
@@ -683,16 +689,20 @@ int64_t evaluate_code_block(CodeBlock block){
                 TOKENERROR(" Error: unexpected token ");
         }
     }
-    /* while(block.variables[block.depth].varc--){ */
-    /*     debug_variable(block.variables[block.depth].variables[block.variables[block.depth].varc]); */
-    /*     free(block.variables[block.depth].variables[block.variables[block.depth].varc].ptr); */
-    /* } */
+    // GC
+    
 eval_ret:
     return ret;
 }
 
+// interpreter argument shifter functions
+char *args_shift(int *argc, char ***argv){
+    (*argc)--;
+    return *((*argv)++);
+}
 
 int main(int argc, char **argv){
+    // prepare interpreter
     char *program_name = args_shift(&argc, &argv);
     if(argc == 0){
         usage(program_name);
@@ -703,6 +713,7 @@ int main(int argc, char **argv){
         verbose = true;
         next_arg = args_shift(&argc, &argv);
     }
+    // Load program code
     char *code_file_name = next_arg;
     FILE *code_file      = fopen(code_file_name, "r");
     if(code_file == NULL){
@@ -715,19 +726,21 @@ int main(int argc, char **argv){
     char *code_src = calloc(code_file_size+1, sizeof(*code_src));
     fread(code_src, code_file_size, 1, code_file);
     fclose(code_file);
+    // Setup lexer
     Lexer lexer = { .file_name = code_file_name,
                     .line = 1, .bol = 0, .pos = 0,
                     .source = code_src};
+    // Parse Functions into memory
     Func fn;
-    while(lexer.source[lexer.pos+1]!=0){
+    while(lexer.source[lexer.pos+1] != 0){
         Token token = next_token(&lexer);
         switch(token.type){
             case TOKEN_FN_DECL:
                 fn = parse_function(&lexer);
                 fn.body.variables = malloc(sizeof(Variables)*10);
-                for(int i=0; i<10; i++){
+                for(int i = 0; i<10; i++){
                     fn.body.variables[i].variables = calloc(sizeof(Variable),10);
-                    fn.body.variables[i].varc=0;
+                    fn.body.variables[i].varc = 0;
                 }
                 fn.body.depth = 1;
                 functions[hash(fn.name)%1024] = fn;
@@ -737,11 +750,12 @@ int main(int argc, char **argv){
                 printf(" Error: unimplemented token '%.*s' in global scope\n", SVVARG(token.sv));
         }
     }
-    // interpritation
+    // Interpritation
     fn = functions[hash((SView){"main", 4})%1024];
-    fn.body.depth=1;
+    fn.body.depth = 1;
     evaluate_code_block(fn.body);
-    for(int i=0; i<10; i++){
+    // FREE !!!
+    for(int i = 0; i<10; i++){
         free(fn.body.variables[i].variables);
     }
     free(fn.body.variables);
