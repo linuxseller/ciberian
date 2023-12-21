@@ -8,24 +8,8 @@
 
 #include "types.h"
 #include "lexer.c"
-
-void printloc(Location loc);
-void debug_token(Token token);
-void debug_variable(Variable variable);
-void debug_block(CodeBlock block);
-size_t hash(SView sv);
-void usage(char *program_name);
-char *args_shift(int *argc, char ***argv);
-enum TypeEnum parse_type(Lexer *lexer);
-enum TypeEnum token_variable_type(Token token);
-int get_type_size_in_bytes(enum TypeEnum type);
-void var_num_cast(Variable *var, int64_t src);
-Func parse_function(Lexer *lexer);
-int64_t get_num_value(Variable var);
-Variable get_var_by_name(SView sv, Variables *variables, int64_t depth);
-int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth);
-bool evaluate_bool_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth);
-CBReturn evaluate_code_block(CodeBlock block);
+#include "functions.h"
+#include "cbrstdlib.c"
 
 Func functions[1024] = {0};
 
@@ -546,11 +530,20 @@ CBReturn evaluate_code_block(CodeBlock block){
                         } else {
                             TOKENERROR(" Error: expected ' = ' or ';', got ");
                         }
-                    } else if(SVCMP(token.sv, "print") == 0) {
+                    } else {
+                        Token *expr_start = &block.code[i];
+                        size_t exprc = 0;
+                        while(token.type != TOKEN_SEMICOLON){
+                            token = block.code[++i];
+                            exprc++;
+                        }
+                        stdcall(expr_start, exprc, block.variables, block.depth);
+                    }
+                    /*if(SVCMP(token.sv, "print") == 0) {
                         token = block.code[++i];
                         while(token.type != TOKEN_SEMICOLON){
                             switch(token.type){
-                                case(TOKEN_STR_LITERAL):
+                                case TOKEN_STR_LITERAL:
                                     printf("%.*s", SVVARG(token.sv));
                                     break;
                                 case TOKEN_NAME:
@@ -621,9 +614,11 @@ CBReturn evaluate_code_block(CodeBlock block){
                             token = block.code[++i];
                         }
                         free(str_input_copy);
-                    }else {
+                    }
+                        else {
                         TOKENERROR(" eror ");
                     }
+                    */
                 }
                 break;
             case TOKEN_IF:
@@ -821,12 +816,9 @@ int main(int argc, char **argv){
     // Interpritation
     fn = functions[hash((SView){"main", 4})%1024];
     fn.body.depth = 1;
+    setup_cbrstd();
     evaluate_code_block(fn.body);
     // FREE !!!
-    /* for(int i = 0; i<10; i++){ */
-    /*     free(fn.body.variables[i].variables); */
-    /* } */
-    /* free(fn.body.variables); */
     free(fn.args);
     free(fn.body.code);
     free(code_src);

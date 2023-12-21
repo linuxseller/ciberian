@@ -1,5 +1,5 @@
 fn fact(i32 n) : i32 {
-    if(2>n){
+    if(n==1){
         return 1;
     }
     return n*fact(n-1,);
