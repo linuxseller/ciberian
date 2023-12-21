@@ -1,22 +1,11 @@
 fn main() : i8 {
-    i64 input;
-    i8 tries;
-    i64 a=174;
-    print "Hello, gues a numba between 1 and 99\n";
-    while(tries!=3){
-        print "Input try[" tries "/3]: ";
-        readlnTo input;
-        if(input==a){
-            print "You Guessed!\n";
-            return;
-        }
-        if(input<a){
-            print "Value is Bigger.\n";
-        } else {
-            print "Value is smaller.\n";
-        }
-        tries=tries+1;
+    i32 arr[1000/6];
+    i32 counter = 1000;
+    i32 i = 0;
+    while(counter>0){
+        arr[i] = counter;
+        counter=counter-7;
+        i = i+1;
     }
-    print "Game finished Loozer!\n";
-    return;
+    dprint arr;
 }

@@ -55,13 +55,22 @@ void cbrstd_print(Token *expr, size_t call_exprc, Variables *variables, size_t d
 void cbrstd_dprint(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
     size_t i=0;
     Token token = expr[i];
+    Variable var;
     while(i<call_exprc){
         switch(token.type){
             case TOKEN_NAME:
-                printf("%s %.*s = %zd\n",
-                        TYPE_TO_STR[get_var_by_name(token.sv, variables, depth).type], 
-                        SVVARG(token.sv),
-                        get_num_value(get_var_by_name(token.sv, variables, depth)));
+                var = get_var_by_name(token.sv, variables, depth);
+                if(var.modifyer==MOD_ARRAY){
+                    //debug_variable(var);
+                    printf("%s %.*s[] = {", TYPE_TO_STR[var.type], SVVARG(var.name));
+                    for(size_t j=0; j<var.size; j++){
+                        printf("%zd, ", get_arr_num_value(var, j));
+                    }
+                    puts("}");
+                } else {
+                    printf("%s %.*s = %zd\n", TYPE_TO_STR[var.type], 
+                            SVVARG(var.name), get_num_value(var));
+                }
                 break;
             default:
                 TOKENERROR(" Error: 'dprint' supports only variables, got ");

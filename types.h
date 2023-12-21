@@ -49,6 +49,8 @@ enum TokenEnum {
     TOKEN_CCURLY,
     TOKEN_OPAREN,
     TOKEN_CPAREN,
+    TOKEN_OSQUAR,
+    TOKEN_CSQUAR,
     TOKEN_STR_LITERAL,
     TOKEN_SEMICOLON,
     TOKEN_RETURN,
@@ -92,7 +94,9 @@ char *TOKEN_TO_STR[] = {
     [TOKEN_OP_NOT       ] = "TOKEN_OP_NOT",
     [TOKEN_IF           ] = "TOKEN_IF",
     [TOKEN_ELSE         ] = "TOKEN_ELSE",
-    [TOKEN_WHILE        ] = "TOKEN_WHILE"
+    [TOKEN_WHILE        ] = "TOKEN_WHILE",
+    [TOKEN_OSQUAR       ] = "TOKEN_OSQUAR",
+    [TOKEN_CSQUAR       ] = "TOKEN_CSQUAR"
 };
 
 enum ModifyerEnum {
@@ -142,6 +146,7 @@ typedef struct {
     enum TypeEnum type;
     void *ptr;
     enum ModifyerEnum modifyer;
+    size_t size;
 } Variable;
 
 typedef struct {

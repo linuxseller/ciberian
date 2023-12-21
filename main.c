@@ -262,7 +262,24 @@ int64_t get_num_value(Variable var){
     }
     return value;
 }
-
+int64_t get_arr_num_value(Variable var, size_t index){
+    int64_t value = 0;
+    switch(var.type){
+        case TYPE_I8:
+            value = *((int8_t*)var.ptr+index);
+            break;
+        case TYPE_I32:
+            value = *((int32_t*)var.ptr+index);
+            break;
+        case TYPE_I64:
+            value = *((int64_t*)var.ptr+index);
+            break;
+        default:
+           printf("EROR: i8 i32 i64 types supported for get_num_value\n");
+           exit(1);
+    }
+    return value;
+}
 Variable get_var_by_name(SView sv, Variables *variables, int64_t depth){
     while(depth>-1){
         for(size_t i = 0; i<variables[depth].varc; i++){
@@ -352,6 +369,7 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
                         Variable var;
                         var.name = fn_to_call.args[j].name;
                         var.type = fn_to_call.args[j].type;
+                        var.modifyer = MOD_NO_MOD;
                         var.ptr = malloc(get_type_size_in_bytes(var.type));
                         var_num_cast(&var, argument_value);
                         if(variables[depth].varc == 0){
@@ -485,7 +503,23 @@ CBReturn evaluate_code_block(CodeBlock block){
                             var.type = token_variable_type(token);
                             token    = block.code[++i];
                             var.name = token.sv;
-                            var.ptr  = malloc(get_type_size_in_bytes(var.type));
+                            if(block.code[i+1].type != TOKEN_OSQUAR){
+                                var.modifyer = MOD_NO_MOD;
+                                var.ptr  = malloc(get_type_size_in_bytes(var.type));
+                            } else { // variable is array
+                                token = block.code[i++];
+                                var.modifyer = MOD_ARRAY;
+                                Token *expr_start = &block.code[i];
+                                size_t expr_size=0;
+                                while(token.type != TOKEN_CSQUAR){
+                                    token = block.code[++i];
+                                    expr_size++;
+                                }
+                                size_t arrlen = evaluate_expr(expr_start, expr_size, block.variables, block.depth); 
+                                var.ptr = malloc(get_type_size_in_bytes(var.type)*arrlen);
+                                var.size = arrlen;
+                                printf("var soize: %zd\n", var.size);
+                            }
                             new_var = true;
                             if(block.variables[block.depth].varc == 0){
                                 block.variables[block.depth].variables = malloc(sizeof(Variable));
@@ -493,6 +527,12 @@ CBReturn evaluate_code_block(CodeBlock block){
                                 block.variables[block.depth].variables =
                                     realloc(block.variables[block.depth].variables, sizeof(Variable)*(block.variables[block.depth].varc+1));
                             }
+                            if(var.modifyer == MOD_ARRAY){
+                                size_t varc = block.variables[block.depth].varc;
+                                block.variables[block.depth].variables[varc] = var;
+                                block.variables[block.depth].varc++;
+                                token=block.code[++i];
+                                break;} // array initialisation not supported for now
                         } else {
                             var = get_var_by_name(token.sv, block.variables, block.depth);
                         }
@@ -500,6 +540,34 @@ CBReturn evaluate_code_block(CodeBlock block){
                             printloc(token.loc);
                             printf(" Error: strings are unsupported\n");
                             exit(1);
+                        }
+                        if(block.code[i+1].type == TOKEN_OSQUAR){ // if square bracket after variable name, then it is acces to array.
+                            if(var.modifyer!=MOD_ARRAY){
+                                TOKENERROR(" Error: trying to use usual variable as array, expected '[', got ");
+                            }
+                            token = block.code[i++];
+                            Token *expr_start = &block.code[i];
+                            size_t expr_size=0;
+                            while(token.type != TOKEN_CSQUAR){
+                                token = block.code[++i];
+                                expr_size++;
+                            }
+                            size_t arr_index = evaluate_expr(expr_start, expr_size, block.variables, block.depth);
+                            void *arr_id_ptr=NULL;
+                            switch(var.type){
+                                case TYPE_I8:
+                                    arr_id_ptr = (int8_t*)var.ptr+arr_index;
+                                    break;
+                                case TYPE_I32:
+                                    arr_id_ptr = (int32_t*)var.ptr+arr_index;
+                                    break;
+                                case TYPE_I64:
+                                    arr_id_ptr = (int64_t*)var.ptr+arr_index;
+                                    break;
+                                default:
+                                    break;
+                            }
+                            var = (Variable){.name = var.name, .modifyer = MOD_NO_MOD, .type = var.type, .ptr = arr_id_ptr};
                         }
                         token = block.code[++i];
                         if(token.type == TOKEN_EQUAL_SIGN){
@@ -515,7 +583,6 @@ CBReturn evaluate_code_block(CodeBlock block){
                             size_t varc = block.variables[block.depth].varc;
                             
                             if(new_var){
-                                
                                 block.variables[block.depth].variables[varc] = var;
                                 block.variables[block.depth].varc++;
                             }else{
@@ -539,86 +606,6 @@ CBReturn evaluate_code_block(CodeBlock block){
                         }
                         stdcall(expr_start, exprc, block.variables, block.depth);
                     }
-                    /*if(SVCMP(token.sv, "print") == 0) {
-                        token = block.code[++i];
-                        while(token.type != TOKEN_SEMICOLON){
-                            switch(token.type){
-                                case TOKEN_STR_LITERAL:
-                                    printf("%.*s", SVVARG(token.sv));
-                                    break;
-                                case TOKEN_NAME:
-                                    {
-                                        Variable var = get_var_by_name(token.sv, block.variables, block.depth);
-                                        if(var.name.data!=NULL){ // if token is variable, get numeric of value and exit
-                                            printf("%zd", get_num_value(var));
-                                            break;
-                                        }
-                                        // if token is not var name, then it should be function
-                                        // so we will grep fucntion call and call it a day
-                                        Token *expr_start = &block.code[i];
-                                        int exprc=0;
-                                        for(int depth_level=0; token.type!=TOKEN_CPAREN && depth_level!=0;){
-                                            token = block.code[++i];
-                                            printf("d_level %d\n", depth_level);
-                                            exprc++;
-                                            switch(token.type){
-                                                case TOKEN_OPAREN:depth_level++;break;
-                                                case TOKEN_CPAREN:depth_level--;break;
-                                                default:break;
-                                            }   
-                                        }
-                                        int64_t tmp = evaluate_expr(expr_start, exprc, block.variables, block.depth);
-                                        printf("%zd", tmp);
-                                    }
-                                    break;
-                                case TOKEN_NUMERIC:
-                                    printf("%ld", SVTOL(token.sv));
-                                    break;
-                                default:
-                                    TOKENERROR(" Error: You dumbass forgot semicolon");
-                            }
-                            token = block.code[++i];
-                        }
-                    } else if(SVCMP(token.sv, "dprint") == 0) {
-                        token = block.code[++i];
-                        while(token.type != TOKEN_SEMICOLON){
-                            switch(token.type){
-                                case TOKEN_NAME:
-                                    printf("%s %.*s = %zd\n",
-                                            TYPE_TO_STR[get_var_by_name(token.sv, block.variables, block.depth).type], 
-                                            SVVARG(token.sv),
-                                            get_num_value(get_var_by_name(token.sv, block.variables, block.depth)));
-                                    break;
-                                default:
-                                    TOKENERROR(" Error: 'dprint' supports only variables, got ");
-                            }
-                            token = block.code[++i];
-                        }
-                    }else if(SVCMP(token.sv, "readlnTo") == 0) {
-                        token = block.code[++i];
-                        int mlced=256;
-                        char *str_input=malloc(mlced);
-                        char *str_input_copy=str_input;
-                        fgets(str_input, mlced, stdin);
-                        while(token.type != TOKEN_SEMICOLON){
-                            switch(token.type){
-                                case TOKEN_NAME:{
-                                    int64_t scanned = strtol(str_input, &str_input, 10);
-                                    Variable var = get_var_by_name(token.sv, block.variables, block.depth);
-                                    var_num_cast(&var, scanned);
-                                    break;
-                                }
-                                default:
-                                    TOKENERROR(" Error: 'readTo' supports only variables, got ");
-                            }
-                            token = block.code[++i];
-                        }
-                        free(str_input_copy);
-                    }
-                        else {
-                        TOKENERROR(" eror ");
-                    }
-                    */
                 }
                 break;
             case TOKEN_IF:

@@ -1,0 +1,10 @@
+fn main() : i8 {
+    i8 scopeTest = 69;
+    if(scopeTest==69){
+        i32 scopeTest = 420;
+        dprint scopeTest;
+    }
+    print "Hi\n";
+    dprint scopeTest
+
+}

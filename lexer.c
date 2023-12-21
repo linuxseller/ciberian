@@ -79,6 +79,10 @@ Token next_token(Lexer *this){
             token_type = TOKEN_OPAREN; break;
         case ')':
             token_type = TOKEN_CPAREN; break;
+        case '[':
+            token_type = TOKEN_OSQUAR; break;
+        case ']':
+            token_type = TOKEN_CSQUAR; break;
         case ';':
             token_type = TOKEN_SEMICOLON; break;
         case ':':

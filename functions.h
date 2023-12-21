@@ -14,6 +14,7 @@ int get_type_size_in_bytes(enum TypeEnum type);
 void var_num_cast(Variable *var, int64_t src);
 Func parse_function(Lexer *lexer);
 int64_t get_num_value(Variable var);
+int64_t get_arr_num_value(Variable var, size_t index);
 Variable get_var_by_name(SView sv, Variables *variables, int64_t depth);
 int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth);
 bool evaluate_bool_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth);
