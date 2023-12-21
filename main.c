@@ -518,7 +518,6 @@ CBReturn evaluate_code_block(CodeBlock block){
                                 size_t arrlen = evaluate_expr(expr_start, expr_size, block.variables, block.depth); 
                                 var.ptr = malloc(get_type_size_in_bytes(var.type)*arrlen);
                                 var.size = arrlen;
-                                printf("var soize: %zd\n", var.size);
                             }
                             new_var = true;
                             if(block.variables[block.depth].varc == 0){
