@@ -52,12 +52,13 @@ General
  - [ ] Else If
  - [ ] Syscalls
  - [ ] Allow `_` in function & variable names
+ - [ ] Remove curses from error messages
 
 Data Types
  - [x] `i8 i32 i64`
  - [ ] `u8 u32 u64`
- - [ ] Strings (like String Viewers or Windows)
- - [ ] Arrays
+ - [ ] Strings (like Arrays or Class-like thingy)
+ - [x] Arrays
  - [ ] Unsigned types
  - [ ] Pointer modificator
  - [ ] User provided Structs
