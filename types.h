@@ -18,6 +18,11 @@
     printf(error "'%.*s'\n", SVVARG(token.sv)); \
     exit(1); \
 }
+#define RUNTIMEERROR(error) { \
+    printloc(token.loc); \
+    printf(error"\n"); \
+    exit(1); \
+}
 enum TypeEnum {
     TYPE_NOT_A_TYPE,
     TYPE_STRING,
@@ -67,7 +72,8 @@ enum TokenEnum {
     TOKEN_OP_NOT,
     TOKEN_IF,
     TOKEN_ELSE,
-    TOKEN_WHILE
+    TOKEN_WHILE,
+    TOKEN_DOT
 };
 
 char *TOKEN_TO_STR[] = {
@@ -96,7 +102,8 @@ char *TOKEN_TO_STR[] = {
     [TOKEN_ELSE         ] = "TOKEN_ELSE",
     [TOKEN_WHILE        ] = "TOKEN_WHILE",
     [TOKEN_OSQUAR       ] = "TOKEN_OSQUAR",
-    [TOKEN_CSQUAR       ] = "TOKEN_CSQUAR"
+    [TOKEN_CSQUAR       ] = "TOKEN_CSQUAR",
+    [TOKEN_DOT          ] = "TOKEN_DOT"
 };
 
 enum ModifyerEnum {
@@ -139,6 +146,7 @@ typedef struct {
 typedef struct {
     SView name;
     enum TypeEnum type;
+    enum ModifyerEnum modifyer;
 } Var_signature;
 
 typedef struct {

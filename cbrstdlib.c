@@ -62,8 +62,8 @@ void cbrstd_dprint(Token *expr, size_t call_exprc, Variables *variables, size_t 
                 var = get_var_by_name(token.sv, variables, depth);
                 if(var.modifyer==MOD_ARRAY){
                     //debug_variable(var);
-                    printf("%s %.*s[] = {", TYPE_TO_STR[var.type], SVVARG(var.name));
-                    for(size_t j=0; j<var.size; j++){
+                    printf("%s %.*s[%zu] = {", TYPE_TO_STR[var.type], SVVARG(var.name), var.size);
+                    for(size_t j=0; j<var.size && j<100; j++){
                         printf("%zd, ", get_arr_num_value(var, j));
                     }
                     puts("}");
@@ -79,7 +79,7 @@ void cbrstd_dprint(Token *expr, size_t call_exprc, Variables *variables, size_t 
     }
 }
 
-void cbrstd_readlnTo(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
+void cbrstd_readTo(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
     size_t i=0;
     Token token = expr[i];
     int mlced=256;
@@ -91,6 +91,9 @@ void cbrstd_readlnTo(Token *expr, size_t call_exprc, Variables *variables, size_
             case TOKEN_NAME:{
                 int64_t scanned = strtol(str_input, &str_input, 10);
                 Variable var = get_var_by_name(token.sv, variables, depth);
+                if(var.modifyer==MOD_ARRAY){
+                    TOKENERROR(" Error: readTo does notr support arrays, got ")
+                }
                 var_num_cast(&var, scanned);
                 break;
             }
@@ -101,26 +104,76 @@ void cbrstd_readlnTo(Token *expr, size_t call_exprc, Variables *variables, size_
     }
     free(str_input_copy);
 }
+
+void cbrstd_readlnTo(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
+    size_t i=0;
+    Token token = expr[i];
+    int mlced=256;
+    char *str_input=malloc(mlced);
+    char *str_input_copy=str_input;
+    fgets(str_input, mlced, stdin);
+    while(i<call_exprc){
+        switch(token.type){
+            case TOKEN_NAME:{
+                Variable var = get_var_by_name(token.sv, variables, depth);
+                int64_t scanned = strtol(str_input, &str_input, 10);
+                if(var.modifyer==MOD_ARRAY){
+                    token = expr[i++];
+                    Token *expr_start = &expr[i];
+                    size_t expr_size=0;
+                    while(token.type != TOKEN_CSQUAR){
+                        token = expr[++i];
+                        expr_size++;
+                    }
+                    size_t arr_index = evaluate_expr(expr_start, expr_size, variables, depth);
+                    void *arr_id_ptr=NULL;
+                    switch(var.type){
+                        case TYPE_I8:
+                            arr_id_ptr = (int8_t*)var.ptr+arr_index;
+                            break;
+                        case TYPE_I32:
+                            arr_id_ptr = (int32_t*)var.ptr+arr_index;
+                            break;
+                        case TYPE_I64:
+                            arr_id_ptr = (int64_t*)var.ptr+arr_index;
+                            break;
+                        default:
+                            break;
+                    }
+                    var = (Variable){.name = var.name, .modifyer = MOD_NO_MOD, .type = var.type, .ptr = arr_id_ptr};
+                } 
+                var_num_cast(&var, scanned);
+                break;
+            }
+            default:
+                TOKENERROR(" Error: 'readTo' supports only variables, got ");
+        }
+        token = expr[++i];
+    }
+    free(str_input_copy);
+}
+
 void (*cbrstd_functions[1024]) (Token*, size_t, Variables*, size_t);
+
+unsigned long char_hash(char *str){
+    unsigned long hash = 5381;
+    int c;
+    while ((c = *str++))
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+    return hash;
+}
+
 void setup_cbrstd(void){
-    cbrstd_functions[0] = &cbrstd_print;
-    cbrstd_functions[1] = &cbrstd_dprint;
-    cbrstd_functions[2] = &cbrstd_readlnTo;
+    cbrstd_functions[char_hash("print") % 1024] = &cbrstd_print;
+    cbrstd_functions[char_hash("dprint") % 1024] = &cbrstd_dprint;
+    cbrstd_functions[char_hash("readlnTo") % 1024] = &cbrstd_readlnTo;
+    cbrstd_functions[char_hash("readTo") % 1024] = &cbrstd_readTo;
 }
 
 CBReturn stdcall(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
-    size_t fn_id;
     size_t i = 0;
     Token token = expr[i];
-    if(SVCMP(token.sv, "print") == 0) {
-        fn_id = 0;
-    } else if(SVCMP(token.sv, "dprint") == 0) {
-        fn_id = 1;
-    }else if(SVCMP(token.sv, "readlnTo") == 0) {
-        fn_id = 2;
-    } else {
-        TOKENERROR(" You stupid bitch, stop using unknown shit, got ");
-    }
-    cbrstd_functions[fn_id](expr+1, call_exprc-1, variables, depth);
+    cbrstd_functions[hash(token.sv)%1024](expr+1, call_exprc-1, variables, depth);
     return (CBReturn){.returned=false};
 }

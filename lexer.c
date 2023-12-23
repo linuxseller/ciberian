@@ -89,6 +89,8 @@ Token next_token(Lexer *this){
             token_type = TOKEN_RETURN_COLON; break;
         case ',':
             token_type = TOKEN_COMMA; break;
+        case '.':
+            token_type = TOKEN_DOT; break;
         case '=':
             token_type = TOKEN_EQUAL_SIGN; break;
         case '+':
