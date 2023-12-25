@@ -21,7 +21,7 @@ void cbrstd_print(Token *expr, size_t call_exprc, Variables *variables, size_t d
                 {
                     Variable var = get_var_by_name(token.sv, variables, depth);
                     if(var.name.data!=NULL){ // if token is variable, get numeric of value and exit
-                        printf("%zd", get_num_value(var));
+                        printf("%zd", get_num_value(var, token.loc));
                         break;
                     }
                     // if token is not var name, then it should be function
@@ -69,7 +69,7 @@ void cbrstd_dprint(Token *expr, size_t call_exprc, Variables *variables, size_t 
                     puts("}");
                 } else {
                     printf("%s %.*s = %zd\n", TYPE_TO_STR[var.type], 
-                            SVVARG(var.name), get_num_value(var));
+                            SVVARG(var.name), get_num_value(var, token.loc));
                 }
                 break;
             default:

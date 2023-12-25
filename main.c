@@ -33,7 +33,7 @@ void debug_variable(Variable variable){
     logf("Varible {\n");
     logf("\tname: %.*s\n", SVVARG(variable.name));
     logf("\ttype: %s\n", TYPE_TO_STR[variable.type]);
-    logf("\tvalue: %zd\n", get_num_value(variable));
+    logf("\tvalue: %zd\n", get_num_value(variable, (Location){0}));
     logf("}\n");
 }
 
@@ -233,22 +233,22 @@ Func parse_function(Lexer *lexer){
     func.args = malloc(sizeof(Var_signature)*10);
     token = next_token(lexer);
     while(token.type!=TOKEN_CPAREN){
-        enum TypeEnum type = token_variable_type(token);
-        token = next_token(lexer);
+        enum TypeEnum type = token_variable_type(token); // getting type
+        token = next_token(lexer); // getting arg name
         if(token.type!=TOKEN_NAME){
             TOKENERROR(" Error: wanted variable name, got ");
         }
         SView argname = token.sv;
-        token=next_token(lexer);
+        token=next_token(lexer); // var modifyer || comma
         enum ModifyerEnum mod = MOD_NO_MOD;
         if(token.type == TOKEN_OSQUAR){
             mod = MOD_ARRAY;
-            token=next_token(lexer);
+            token=next_token(lexer); // arg was arr => next_token == ']'
+            token = next_token(lexer); // if arg was arr -> get comma as token => next_token == ','
         }
         Var_signature vs = {.name=argname, .type = type, .modifyer=mod};
         func.args[func.argc] = vs;
         func.argc++;
-        token = next_token(lexer);
         if(token.type==TOKEN_COMMA&&token.type!=TOKEN_CPAREN){
             token = next_token(lexer);
         }
@@ -281,7 +281,7 @@ Func parse_function(Lexer *lexer){
     return func;
 }
 
-int64_t get_num_value(Variable var){
+int64_t get_num_value(Variable var, Location loc){
     int64_t value = 0;
     switch(var.type){
         case TYPE_I8:
@@ -294,7 +294,8 @@ int64_t get_num_value(Variable var){
             value = *(int64_t*)var.ptr;
             break;
         case TYPE_NOT_A_TYPE:
-            logf("Error: could not find variable!!!\n");
+            printloc(loc);
+            logf(" Error: could not find variable!!!\n");
             exit(1);
             break;
         default:
@@ -420,12 +421,14 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
                                 }
                                 size_t arr_index = evaluate_expr(expr_start, expr_size, variables, depth);
                                 Variable var_ret = get_var_from_arr(var, arr_index);
-                                value = get_num_value(var_ret);
+                                value = get_num_value(var_ret, token.loc);
                             } else {
                                 RUNTIMEERROR("Expected .length or [id], got ");
                             }
                         } else {
-                            value = get_num_value(var);
+                            value = get_num_value(var, expr[i].loc);
+                            printf("gnv%zd\n", value);
+                            debug_variable(var);
                         }
                         postfix[j].type=RPN_NUM;
                         postfix[j].numeric=value;
@@ -451,9 +454,16 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
                         var.modifyer = fn_to_call.args[j].modifyer;
                         if(var.modifyer == MOD_ARRAY){
                             Variable src = get_var_by_name(token.sv, variables, depth);
+                            if(src.modifyer!=MOD_ARRAY){
+                                printloc(token.loc);
+                                logf(" Error: expected array, got %s \n", TYPE_TO_STR[src.type]);
+                                exit(1);
+                            }
                             var.size = src.size;
                             var.ptr = malloc(get_type_size_in_bytes(var.type) * src.size);
                             copy_array(var, src);
+                            token = expr[++i];
+                            token = expr[++i];
                         } else { // if var not array
                             token = expr[++i];
                             Token *arg_expr_start = &expr[i];
@@ -468,6 +478,7 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
                             token = expr[++i];
                             int64_t argument_value = evaluate_expr(arg_expr_start, arg_exprc, variables, depth);
                             var.ptr = malloc(get_type_size_in_bytes(var.type));
+                            printf("%zd\n", argument_value);
                             var_num_cast(&var, argument_value);
                         }
 
@@ -769,9 +780,15 @@ CBReturn evaluate_code_block(CodeBlock block){
                     token = block.code[++i];
                     Token *while_expr_start = &block.code[i];
                     int while_expr_exprc = 0;
-                    while(token.type != TOKEN_CPAREN){
+                    //COUNT_TOKEN_EXPRC(while_expr_exprc)
+                    for(int depth_level=1; token.type != TOKEN_CPAREN||depth_level>0; ){
                         token = block.code[++i];
                         while_expr_exprc++;
+                        switch(token.type){
+                            case TOKEN_OPAREN:depth_level++;break;
+                            case TOKEN_CPAREN:depth_level--;break;
+                            default:break;
+                        }
                     }
                     token = block.code[++i];
                     Token *while_block_start = &block.code[++i];
