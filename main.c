@@ -90,7 +90,7 @@ enum TypeEnum parse_type(Lexer *lexer){
     } else {
         TOKENERROR(" Error: unknown type ");
     }
-    return type; 
+    return type;
 }
 
 enum TypeEnum token_variable_type(Token token){
@@ -115,8 +115,7 @@ enum TypeEnum token_variable_type(Token token){
     } else {
         type = TYPE_NOT_A_TYPE;
     }
-    
-    return type; 
+    return type;
 }
 
 int get_type_size_in_bytes(enum TypeEnum type){
@@ -133,7 +132,7 @@ int get_type_size_in_bytes(enum TypeEnum type){
         case TYPE_STRING:
             return sizeof(SView);
        default:
-           return -1; 
+           return -1;
     }
 }
 
@@ -206,7 +205,6 @@ void copy_array(Variable dst, Variable src){
             break;
         case TYPE_I32:
             for(size_t i=0; i<src.size; i++){
-                //printf("%d %d d\n", )
                 *((int32_t*)dst.ptr+i) = *((int32_t*)src.ptr+i);
             }
             break;
@@ -277,7 +275,6 @@ Func parse_function(Lexer *lexer){
             default:break;
         }
     }
-    
     return func;
 }
 
@@ -360,7 +357,6 @@ Variable get_var_from_arr(Variable arr_var, int64_t arr_index){
             break;
         case TYPE_I32:
             arr_id_ptr = (int32_t*)arr_var.ptr+arr_index;
-            //printf("%d\n", *(int*)arr_var.ptr);
             break;
         case TYPE_I64:
             arr_id_ptr = (int64_t*)arr_var.ptr+arr_index;
@@ -407,19 +403,16 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
                             if(token.type==TOKEN_DOT){
                                 i++;
                                 if(SVCMP(expr[i].sv, "length")==0){
-                                    value = var.size; 
+                                    value = var.size;
                                 } else {
                                     TOKENERROR(" Error, array has no such field ");
                                 }
                             } else if(token.type == TOKEN_OSQUAR){
                                 //RUNTIMEERROR(" array[id] not implemented ");
                                 Token *expr_start = &expr[i];
-                                size_t expr_size=0;
-                                while(token.type != TOKEN_CSQUAR){
-                                    token = expr[++i];
-                                    expr_size++;
-                                }
-                                size_t arr_index = evaluate_expr(expr_start, expr_size, variables, depth);
+                                size_t exprc=0;
+                                COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, expr, i);
+                                size_t arr_index = evaluate_expr(expr_start, exprc, variables, depth);
                                 Variable var_ret = get_var_from_arr(var, arr_index);
                                 value = get_num_value(var_ret, token.loc);
                             } else {
@@ -427,8 +420,6 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
                             }
                         } else {
                             value = get_num_value(var, expr[i].loc);
-                            printf("gnv%zd\n", value);
-                            debug_variable(var);
                         }
                         postfix[j].type=RPN_NUM;
                         postfix[j].numeric=value;
@@ -478,7 +469,6 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
                             token = expr[++i];
                             int64_t argument_value = evaluate_expr(arg_expr_start, arg_exprc, variables, depth);
                             var.ptr = malloc(get_type_size_in_bytes(var.type));
-                            printf("%zd\n", argument_value);
                             var_num_cast(&var, argument_value);
                         }
 
@@ -596,7 +586,7 @@ CBReturn evaluate_code_block(CodeBlock block){
             case TOKEN_NAME:
                 {
                     if(token_variable_type(token) != TYPE_NOT_A_TYPE
-                        || get_var_by_name(token.sv, block.variables, block.depth).ptr != NULL){ 
+                        || get_var_by_name(token.sv, block.variables, block.depth).ptr != NULL){
                         Variable var = {0};
                         bool new_var = false;
                         if(token_variable_type(token) != TYPE_NOT_A_TYPE){
@@ -610,12 +600,9 @@ CBReturn evaluate_code_block(CodeBlock block){
                                 token = block.code[i++];
                                 var.modifyer = MOD_ARRAY;
                                 Token *expr_start = &block.code[i];
-                                size_t expr_size=0;
-                                while(token.type != TOKEN_CSQUAR){
-                                    token = block.code[++i];
-                                    expr_size++;
-                                }
-                                size_t arrlen = evaluate_expr(expr_start, expr_size, block.variables, block.depth); 
+                                size_t exprc=0;
+                                COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, block.code, i);
+                                size_t arrlen = evaluate_expr(expr_start, exprc, block.variables, block.depth);
                                 var.ptr = malloc(get_type_size_in_bytes(var.type)*arrlen);
                                 var.size = arrlen;
                             }
@@ -646,12 +633,9 @@ CBReturn evaluate_code_block(CodeBlock block){
                             }
                             token = block.code[i++];
                             Token *expr_start = &block.code[i];
-                            size_t expr_size=0;
-                            while(token.type != TOKEN_CSQUAR){
-                                token = block.code[++i];
-                                expr_size++;
-                            }
-                            size_t arr_index = evaluate_expr(expr_start, expr_size, block.variables, block.depth);
+                            size_t exprc=0;
+                            COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, block.code, i);
+                            size_t arr_index = evaluate_expr(expr_start, exprc, block.variables, block.depth);
                             void *arr_id_ptr=NULL;
                             if(arr_index>var.size || arr_index<0){
                                 RUNTIMEERROR(" Error: array index is out of range [0;array.size)");
@@ -683,7 +667,6 @@ CBReturn evaluate_code_block(CodeBlock block){
                             int64_t val = evaluate_expr(expr_start, expr_size, block.variables, block.depth); 
                             var_num_cast(&var, val);
                             size_t varc = block.variables[block.depth].varc;
-                            
                             if(new_var){
                                 block.variables[block.depth].variables[varc] = var;
                                 block.variables[block.depth].varc++;
@@ -725,7 +708,6 @@ CBReturn evaluate_code_block(CodeBlock block){
                     }
                     bool if_true = evaluate_bool_expr(expr_start, exprc, block.variables, block.depth);
                     if(!if_true){ // skip if block
-                       
                        for(int depth_level = 0; token.type != TOKEN_CCURLY || depth_level>0;){
                             token = block.code[++i];
                             switch(token.type){
@@ -847,7 +829,6 @@ CBReturn evaluate_code_block(CodeBlock block){
         }
     }
     // GC
-    
 eval_ret:
     return ret;
 }
@@ -910,6 +891,8 @@ int main(int argc, char **argv){
     fn = functions[hash((SView){"main", 4})%1024];
     fn.body.depth = 1;
     setup_cbrstd();
+    for (size_t i = 0; i < fn.body.exprc; i++) {
+    }
     evaluate_code_block(fn.body);
     // FREE !!!
     free(fn.args);

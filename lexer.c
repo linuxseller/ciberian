@@ -14,12 +14,13 @@ void chop_char(Lexer *this){
 
 void trim_left(Lexer *this){
     while(isspace(CURR) && CURR!='\0'){
-      chop_char(this); 
+      chop_char(this);
     }
 }
 
 void drop_line(Lexer *this) {
-    while(CURR!='\0' && CURR!='\n') {
+    while(CURR!='\n' && CURR!='\0') {
+        /* printf("dropped: %c\n", CURR); */
         chop_char(this);
     }
     if (CURR!='\0') {
@@ -35,16 +36,18 @@ Token next_token(Lexer *this){
         drop_line(this);
         first_char = CURR;
     }
+    trim_left(this);
+    first_char = CURR;
     Location loc = {.col       = this->pos-this->bol+1,
                     .row       = this->line,
                     .file_path = this->file_name};
-    
+
     sv.data = this->source+this->pos;
     size_t start = this->pos;
     enum TokenEnum token_type;
     if(isalpha(first_char)){
         while(CURR!='\0' && isalnum(CURR)) {
-           chop_char(this); 
+           chop_char(this);
         }
         sv.size = this->pos - start;
         if(SVCMP(sv, "fn")==0){
@@ -133,7 +136,7 @@ Token next_token(Lexer *this){
                     }
                     sv.size = str_lit_len;
                     break;
-                  } // token string literal 
+                  } // token string literal
     }
     chop_char(this);
     return (Token){.loc=loc, .sv=sv, .type=token_type};

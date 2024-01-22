@@ -17,36 +17,37 @@ void cbrstd_print(Token *expr, size_t call_exprc, Variables *variables, size_t d
             case TOKEN_STR_LITERAL:
                 printf("%.*s", SVVARG(token.sv));
                 break;
+            case TOKEN_NUMERIC:
+                printf("%ld", SVTOL(token.sv));
+                break;
             case TOKEN_NAME:
                 {
                     Variable var = get_var_by_name(token.sv, variables, depth);
                     if(var.name.data!=NULL){ // if token is variable, get numeric of value and exit
+                        if(var.modifyer==MOD_ARRAY){
+                            i++;
+                            Token *expr_start = &expr[++i];
+                            size_t exprc;
+                            COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, expr, i);
+                            i++;
+                            int64_t index = evaluate_expr(expr_start, exprc, variables, depth);
+                            printf("%zd", get_arr_num_value(var, index));
+                            break;
+                        }
                         printf("%zd", get_num_value(var, token.loc));
                         break;
                     }
                     // if token is not var name, then it should be function
                     // so we will grep fucntion call and call it a day
                     Token *expr_start = &expr[i];
-                    int exprc=0;
-                    for(int depth_level=0; token.type!=TOKEN_CPAREN && depth_level!=0;){
-                        token = expr[++i];
-                        printf("d_level %d\n", depth_level);
-                        exprc++;
-                        switch(token.type){
-                            case TOKEN_OPAREN:depth_level++;break;
-                            case TOKEN_CPAREN:depth_level--;break;
-                            default:break;
-                        }   
-                    }
+                    size_t exprc=0;
+                    COLLECT_EXPR(TOKEN_OPAREN, TOKEN_CPAREN, expr, i);
                     int64_t tmp = evaluate_expr(expr_start, exprc, variables, depth);
                     printf("%zd", tmp);
                 }
                 break;
-            case TOKEN_NUMERIC:
-                printf("%ld", SVTOL(token.sv));
-                break;
             default:
-                TOKENERROR(" Error: You dumbass forgot semicolon");
+                TOKENERROR(" Error: You dumbass forgot semicolon, got ");
         }
         token = expr[++i];
     }
@@ -63,12 +64,12 @@ void cbrstd_dprint(Token *expr, size_t call_exprc, Variables *variables, size_t 
                 if(var.modifyer==MOD_ARRAY){
                     //debug_variable(var);
                     printf("%s %.*s[%zu] = {", TYPE_TO_STR[var.type], SVVARG(var.name), var.size);
-                    for(size_t j=0; j<var.size && j<100; j++){
+                    for(size_t j=0; j<var.size; j++){
                         printf("%zd, ", get_arr_num_value(var, j));
                     }
                     puts("}");
                 } else {
-                    printf("%s %.*s = %zd\n", TYPE_TO_STR[var.type], 
+                    printf("%s %.*s = %zd\n", TYPE_TO_STR[var.type],
                             SVVARG(var.name), get_num_value(var, token.loc));
                 }
                 break;

@@ -1,3 +1,4 @@
+# Hello world example
 fn main() : i8 {
     print "Hello World!\n";
 }

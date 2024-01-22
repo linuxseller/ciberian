@@ -13,7 +13,21 @@
 #define SVSVCMP(sv, b) strncmp(b.data, sv.data, MAX(sv.size, b.size))
 #define SVVARG(sv) (int)sv.size, sv.data
 #define SVTOL(sv) strtol(sv.data, NULL, 10)
+
+#define COLLECT_EXPR(bracketo, bracketc, expr, i){ \
+    exprc = 0; \
+    for(int depth_level=1; token.type!=bracketc && depth_level!=0;){ \
+        token = expr[++i]; \
+        exprc++; \
+        switch(token.type){ \
+            case bracketo:depth_level++;break; \
+            case bracketc:depth_level--;break; \
+            default:break; \
+        } \
+    } \
+}
 #define TOKENERROR(error) { \
+    printf("\n"); \
     printloc(token.loc); \
     printf(error "'%.*s'\n", SVVARG(token.sv)); \
     exit(1); \
