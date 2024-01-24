@@ -3,17 +3,14 @@
 # 2. print it
 
 fn main() : i8 {
-    i32 arr[1000/6];
+    i32 arr[143];
     i32 counter = 1000;
-    i32 i = 19;
+    i32 i = 0;
     while(counter>0){
-        arr[i-19] = counter;
-        dprint i;
+        arr[i] = counter;
         counter=counter-7;
         i = i+1;
     }
     dprint i;
-    print "arr["i"]=" arr[i];
-    print "\n";
     dprint arr;
 }

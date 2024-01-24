@@ -60,6 +60,10 @@ Token next_token(Lexer *this){
             token_type = TOKEN_IF;
         } else if(SVCMP(sv, "else")==0){
             token_type = TOKEN_ELSE;
+        } else if(SVCMP(sv, "true")==0){
+            token_type = TOKEN_TRUE;
+        } else if(SVCMP(sv, "false")==0){
+            token_type = TOKEN_FALSE;
         } else {
             token_type = TOKEN_NAME;
         }

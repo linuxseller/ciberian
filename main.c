@@ -100,7 +100,7 @@ enum TypeEnum token_variable_type(Token token){
     } else if(SVCMP(token.sv, "i32")==0){
         type = TYPE_I32;
     } else if(SVCMP(token.sv, "i64")==0){
-        if(sizeof(size_t)!=sizeof(int64_t)){
+        if(sizeof(size_t)!=sizeof(ssize_t)){
             TOKENERROR(" Error: i64 not supported on this architecture");
         }
         type = TYPE_I64;
@@ -137,7 +137,7 @@ int get_type_size_in_bytes(enum TypeEnum type){
 }
 
 // Cast int to variable
-void var_num_cast(Variable *var, int64_t src){
+void var_num_cast(Variable *var, ssize_t src){
     bool overflow = false;
     bool underflow = false;
     switch(var->type){
@@ -162,7 +162,7 @@ void var_num_cast(Variable *var, int64_t src){
             *(int32_t*)var->ptr = src;
             break;
         case TYPE_I64:
-            *(int64_t*)var->ptr = src;
+            *(ssize_t*)var->ptr = src;
             break;
         default:
            logf("ERROR: i8 i32 i64 types supported\n");
@@ -210,7 +210,7 @@ void copy_array(Variable dst, Variable src){
             break;
         case TYPE_I64:
             for(size_t i=0; i<src.size; i++){
-                *((int64_t*)dst.ptr+i) = *((int64_t*)src.ptr+i);
+                *((ssize_t*)dst.ptr+i) = *((ssize_t*)src.ptr+i);
             }
             break;
         default:
@@ -278,8 +278,8 @@ Func parse_function(Lexer *lexer){
     return func;
 }
 
-int64_t get_num_value(Variable var, Location loc){
-    int64_t value = 0;
+ssize_t get_num_value(Variable var, Location loc){
+    ssize_t value = 0;
     switch(var.type){
         case TYPE_I8:
             value = *(int8_t*)var.ptr;
@@ -288,7 +288,7 @@ int64_t get_num_value(Variable var, Location loc){
             value = *(int32_t*)var.ptr;
             break;
         case TYPE_I64:
-            value = *(int64_t*)var.ptr;
+            value = *(ssize_t*)var.ptr;
             break;
         case TYPE_NOT_A_TYPE:
             printloc(loc);
@@ -301,8 +301,8 @@ int64_t get_num_value(Variable var, Location loc){
     }
     return value;
 }
-int64_t get_arr_num_value(Variable var, size_t index){
-    int64_t value = 0;
+ssize_t get_arr_num_value(Variable var, size_t index){
+    ssize_t value = 0;
     switch(var.type){
         case TYPE_I8:
             value = *((int8_t*)var.ptr+index);
@@ -311,7 +311,7 @@ int64_t get_arr_num_value(Variable var, size_t index){
             value = *((int32_t*)var.ptr+index);
             break;
         case TYPE_I64:
-            value = *((int64_t*)var.ptr+index);
+            value = *((ssize_t*)var.ptr+index);
             break;
         default:
            logf("EROR: i8 i32 i64 types supported for get_num_value\n");
@@ -319,7 +319,7 @@ int64_t get_arr_num_value(Variable var, size_t index){
     }
     return value;
 }
-Variable get_var_by_name(SView sv, Variables *variables, int64_t depth){
+Variable get_var_by_name(SView sv, Variables *variables, ssize_t depth){
     while(depth>-1){
         for(size_t i = 0; i<variables[depth].varc; i++){
             if(SVSVCMP(sv, variables[depth].variables[i].name) == 0){
@@ -335,7 +335,7 @@ typedef struct {
     enum {RPN_OPERATOR, RPN_NUM} type;
     union {
         Token oper;
-        int64_t numeric;
+        ssize_t numeric;
     };
 } RpnObject;
 
@@ -346,8 +346,8 @@ int OP_PREC[] = {
     [TOKEN_OP_MINUS] = 1,
 };
 
-Variable get_var_from_arr(Variable arr_var, int64_t arr_index){
-    if(arr_index>(int64_t)arr_var.size || arr_index<0){
+Variable get_var_from_arr(Variable arr_var, ssize_t arr_index){
+    if(arr_index>(ssize_t)arr_var.size || arr_index<0){
         //RUNTIMEERROR(" Error: array index is out of range [0;array.size)");
     }
     void *arr_id_ptr=NULL;
@@ -359,7 +359,7 @@ Variable get_var_from_arr(Variable arr_var, int64_t arr_index){
             arr_id_ptr = (int32_t*)arr_var.ptr+arr_index;
             break;
         case TYPE_I64:
-            arr_id_ptr = (int64_t*)arr_var.ptr+arr_index;
+            arr_id_ptr = (ssize_t*)arr_var.ptr+arr_index;
             break;
         default:
             break;
@@ -368,10 +368,10 @@ Variable get_var_from_arr(Variable arr_var, int64_t arr_index){
     return var;
 }
 
-int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth){
+ssize_t evaluate_expr(Token *expr, ssize_t expr_size, Variables *variables, size_t depth){
     RpnObject *stack = malloc(sizeof(RpnObject)*expr_size);
     RpnObject *postfix = malloc(sizeof(RpnObject)*expr_size);
-    int64_t value;
+    ssize_t value;
     Variable var;
     int top = -1;
     int j = 0;
@@ -408,7 +408,6 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
                                     TOKENERROR(" Error, array has no such field ");
                                 }
                             } else if(token.type == TOKEN_OSQUAR){
-                                //RUNTIMEERROR(" array[id] not implemented ");
                                 Token *expr_start = &expr[i];
                                 size_t exprc=0;
                                 COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, expr, i);
@@ -416,7 +415,7 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
                                 Variable var_ret = get_var_from_arr(var, arr_index);
                                 value = get_num_value(var_ret, token.loc);
                             } else {
-                                RUNTIMEERROR("Expected .length or [id], got ");
+                                RUNTIMEERROR("Expected .length or [index], got ");
                             }
                         } else {
                             value = get_num_value(var, expr[i].loc);
@@ -426,72 +425,7 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
                         j++;
                         break;
                     }
-                    Token fn_token = expr[i];
-                    Token token = expr[++i];
-                    if(token.type!=TOKEN_OPAREN){
-                        TOKENERROR(" Error: you probably skipped '()' when function call. Otherwise you are f@cked up. Got ")
-                    }
-                    token = expr[++i];
-                    // function call handling
-                    Func fn_to_call = functions[hash(fn_token.sv)%1024];
-                    fn_to_call.body.variables=malloc(sizeof(Variables)*10);
-                    for(int i = 0; i<10; i++){
-                        fn_to_call.body.variables[i].varc = 0;
-                    }
-                    for(size_t j = 0; j<fn_to_call.argc; j++){
-                        Variable var;
-                        var.name     = fn_to_call.args[j].name;
-                        var.type     = fn_to_call.args[j].type;
-                        var.modifyer = fn_to_call.args[j].modifyer;
-                        if(var.modifyer == MOD_ARRAY){
-                            Variable src = get_var_by_name(token.sv, variables, depth);
-                            if(src.modifyer!=MOD_ARRAY){
-                                printloc(token.loc);
-                                logf(" Error: expected array, got %s \n", TYPE_TO_STR[src.type]);
-                                exit(1);
-                            }
-                            var.size = src.size;
-                            var.ptr = malloc(get_type_size_in_bytes(var.type) * src.size);
-                            copy_array(var, src);
-                            token = expr[++i];
-                            token = expr[++i];
-                        } else { // if var not array
-                            token = expr[++i];
-                            Token *arg_expr_start = &expr[i];
-                            int arg_exprc = 0;
-                            while(token.type != TOKEN_COMMA){
-                                if(token.type == TOKEN_CPAREN){
-                                    TOKENERROR(" Error: uhhm, bruh. You forgor some arguments ")
-                                }
-                                token = expr[++i];
-                                arg_exprc++;
-                            }
-                            token = expr[++i];
-                            int64_t argument_value = evaluate_expr(arg_expr_start, arg_exprc, variables, depth);
-                            var.ptr = malloc(get_type_size_in_bytes(var.type));
-                            var_num_cast(&var, argument_value);
-                        }
-
-                        if(variables[depth].varc == 0){
-                            fn_to_call.body.variables[1].variables = malloc(sizeof(Variable));
-                        } else {
-                            fn_to_call.body.variables[1].variables =
-                                realloc(fn_to_call.body.variables[1].variables, sizeof(Variable)*(fn_to_call.body.variables[1].varc+1));
-                        }
-                        fn_to_call.body.variables[1].variables[j] = var;
-                        fn_to_call.body.variables[1].varc++;
-                        fn_to_call.body.depth = 1;
-                    }
-                    if(fn_to_call.name.data == NULL){
-                        TOKENERROR(" Error: unknown directive ");
-                    }
-                    while(token.type != TOKEN_SEMICOLON){
-                        token = expr[++i];
-                    }
-                    postfix[j].type = RPN_NUM;
-                    postfix[j].numeric = evaluate_code_block(fn_to_call.body).value;
-                    j++;
-                    break;
+                // function call handling
                 }
             default:break;
         }
@@ -500,9 +434,10 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
         postfix[j++] = stack[top--];
     }
     top = 0;
-    if(postfix[0].oper.type==TOKEN_OP_MINUS){
-        postfix[1].numeric=-postfix[1].numeric;
-    }
+    /* if(postfix[0].oper.type==TOKEN_OP_MINUS){ */
+    /*     debug_token(postfix[0].oper); */
+    /*     postfix[1].numeric=-postfix[1].numeric; */
+    /* } */
     for(int i = 0; i<j; i++){
         stack[top] = postfix[i];
         if(stack[top].type == RPN_OPERATOR){
@@ -526,15 +461,15 @@ int64_t evaluate_expr(Token *expr, int64_t expr_size, Variables *variables, size
         }
         top++;
     }
-    int64_t rval = stack[top-1].numeric;
+    ssize_t rval = stack[top-1].numeric;
     free(stack);
     free(postfix);
     return rval;
 }
 
-bool evaluate_bool_expr(Token *expr, int64_t expr_size, Variables *variables, size_t depth){
+bool evaluate_bool_expr(Token *expr, ssize_t expr_size, Variables *variables, size_t depth){
     if(expr_size <= 0){return 0;}
-    int64_t left_expr_size = 0;
+    ssize_t left_expr_size = 0;
     while(expr[left_expr_size].type != TOKEN_OP_LESS && expr[left_expr_size].type != TOKEN_OP_GREATER
             && expr[left_expr_size].type != TOKEN_OP_NOT && expr[left_expr_size].type != TOKEN_OP_NOT
             && expr[left_expr_size].type != TOKEN_EQUAL_SIGN){
@@ -542,9 +477,9 @@ bool evaluate_bool_expr(Token *expr, int64_t expr_size, Variables *variables, si
     }
     enum TokenEnum token_op = expr[left_expr_size].type;
     Token token_op_next = expr[left_expr_size+1];
-    int64_t right_expr_size = expr_size-left_expr_size-1;
-    int64_t left_value = evaluate_expr(expr, left_expr_size, variables, depth);
-    int64_t right_value = evaluate_expr(expr+left_expr_size+1, right_expr_size, variables, depth);
+    ssize_t right_expr_size = expr_size-left_expr_size-1;
+    ssize_t left_value = evaluate_expr(expr, left_expr_size, variables, depth);
+    ssize_t right_value = evaluate_expr(expr+left_expr_size+1, right_expr_size, variables, depth);
     switch(token_op){
         case TOKEN_OP_LESS:
             if(token_op_next.type==TOKEN_EQUAL_SIGN){
@@ -618,7 +553,8 @@ CBReturn evaluate_code_block(CodeBlock block){
                                 block.variables[block.depth].variables[varc] = var;
                                 block.variables[block.depth].varc++;
                                 token=block.code[++i];
-                                break;} // array initialisation not supported for now
+                                break;
+                            } // array initialisation not supported for now
                         } else {
                             var = get_var_by_name(token.sv, block.variables, block.depth);
                         }
@@ -631,14 +567,16 @@ CBReturn evaluate_code_block(CodeBlock block){
                             if(var.modifyer!=MOD_ARRAY){
                                 TOKENERROR(" Error: trying to use usual variable as array, expected '[', got ");
                             }
-                            token = block.code[i++];
-                            Token *expr_start = &block.code[i];
+                            token = block.code[++i];
+                            Token *expr_start = &block.code[++i];
                             size_t exprc=0;
                             COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, block.code, i);
                             size_t arr_index = evaluate_expr(expr_start, exprc, block.variables, block.depth);
                             void *arr_id_ptr=NULL;
-                            if(arr_index>var.size || arr_index<0){
-                                RUNTIMEERROR(" Error: array index is out of range [0;array.size)");
+                            if(arr_index>=var.size || arr_index<0){
+                                printloc(token.loc);
+                                logf(" Error: array index %zd is out of range [0;%zd)\n", arr_index, var.size);
+                                exit(69);
                             }
                             switch(var.type){
                                 case TYPE_I8:
@@ -648,39 +586,79 @@ CBReturn evaluate_code_block(CodeBlock block){
                                     arr_id_ptr = (int32_t*)var.ptr+arr_index;
                                     break;
                                 case TYPE_I64:
-                                    arr_id_ptr = (int64_t*)var.ptr+arr_index;
+                                    arr_id_ptr = (ssize_t*)var.ptr+arr_index;
                                     break;
                                 default:
                                     break;
                             }
                             var = (Variable){.name = var.name, .modifyer = MOD_NO_MOD, .type = var.type, .ptr = arr_id_ptr};
                         }
-                        token = block.code[++i];
-                        if(token.type == TOKEN_EQUAL_SIGN){
-                            token = block.code[++i];
-                            int expr_size = 0;
-                            Token *expr_start = &block.code[i];
-                            while(token.type != TOKEN_SEMICOLON){
+                        Token op_token = block.code[++i];
+                        // assignation
+                        switch(op_token.type){
+                            case TOKEN_EQUAL_SIGN:{
                                 token = block.code[++i];
-                                expr_size++;
+                                if (token.type==TOKEN_STR_LITERAL) {
+                                    TOKENERROR(" Error: strings are unsupported ")
+                                }
+                                int expr_size = 0;
+                                Token *expr_start = &block.code[i];
+                                while(token.type != TOKEN_SEMICOLON){
+                                    token = block.code[++i];
+                                    expr_size++;
+                                }
+                                ssize_t val = evaluate_expr(expr_start, expr_size, block.variables, block.depth);
+                                var_num_cast(&var, val);
+                                size_t varc = block.variables[block.depth].varc;
+                                if(new_var){
+                                    block.variables[block.depth].variables[varc] = var;
+                                    block.variables[block.depth].varc++;
+                                }
+                                break;
                             }
-                            int64_t val = evaluate_expr(expr_start, expr_size, block.variables, block.depth); 
-                            var_num_cast(&var, val);
-                            size_t varc = block.variables[block.depth].varc;
-                            if(new_var){
+                            case TOKEN_SEMICOLON:{
+                                var_num_cast(&var, 0);
+                                size_t varc = block.variables[block.depth].varc;
                                 block.variables[block.depth].variables[varc] = var;
-                                block.variables[block.depth].varc++;
-                            }else{
+                                if(new_var){
+                                    block.variables[block.depth].varc++;
+                                }
+                                break;
                             }
-                        } else if(token.type == TOKEN_SEMICOLON){
-                            var_num_cast(&var, 0);
-                            size_t varc = block.variables[block.depth].varc;
-                            block.variables[block.depth].variables[varc] = var;
-                            if(new_var){
-                                block.variables[block.depth].varc++;
+                            default:{
+                                    token = block.code[++i];
+                                    if(token.type!=TOKEN_EQUAL_SIGN){
+                                        TOKENERROR(" Error: expected '=', got ");
+                                    }
+                                    int expr_size = 0;
+                                    Token *expr_start = &block.code[i];
+                                    while(token.type != TOKEN_SEMICOLON){
+                                        token = block.code[++i];
+                                        expr_size++;
+                                    }
+                                    ssize_t val = evaluate_expr(expr_start, expr_size, block.variables, block.depth);
+                                    switch(op_token.type){
+                                    case TOKEN_OP_PLUS:
+                                        var_num_cast(&var, get_num_value(var, token.loc)+val);
+                                        break;
+                                    case TOKEN_OP_MINUS:
+                                        var_num_cast(&var, get_num_value(var, token.loc)-val);
+                                        break;
+                                    case TOKEN_OP_MUL:
+                                        var_num_cast(&var, get_num_value(var, token.loc)*val);
+                                        break;
+                                    case TOKEN_OP_DIV:
+                                        var_num_cast(&var, get_num_value(var, token.loc)/val);
+                                        break;
+                                    default:
+                                        TOKENERROR(" Error: expected ' = ' or ';', got ");
+                                    }
+                                    size_t varc = block.variables[block.depth].varc;
+                                    if(new_var){
+                                        block.variables[block.depth].variables[varc] = var;
+                                        block.variables[block.depth].varc++;
+                                    }
                             }
-                        } else {
-                            TOKENERROR(" Error: expected ' = ' or ';', got ");
                         }
                     } else {
                         Token *expr_start = &block.code[i];

@@ -57,7 +57,7 @@ char *TYPE_TO_STR[]={
 
 typedef struct {
     bool returned; 
-    int64_t value;
+    ssize_t value;
 } CBReturn;
 
 enum TokenEnum {
@@ -87,7 +87,9 @@ enum TokenEnum {
     TOKEN_IF,
     TOKEN_ELSE,
     TOKEN_WHILE,
-    TOKEN_DOT
+    TOKEN_DOT,
+    TOKEN_TRUE,
+    TOKEN_FALSE
 };
 
 char *TOKEN_TO_STR[] = {
@@ -117,7 +119,9 @@ char *TOKEN_TO_STR[] = {
     [TOKEN_WHILE        ] = "TOKEN_WHILE",
     [TOKEN_OSQUAR       ] = "TOKEN_OSQUAR",
     [TOKEN_CSQUAR       ] = "TOKEN_CSQUAR",
-    [TOKEN_DOT          ] = "TOKEN_DOT"
+    [TOKEN_DOT          ] = "TOKEN_DOT",
+    [TOKEN_TRUE         ] = "TOKEN_TRUE",
+    [TOKEN_FALSE         ] = "TOKEN_FLASE"
 };
 
 enum ModifyerEnum {

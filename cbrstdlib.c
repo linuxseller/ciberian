@@ -9,6 +9,13 @@
 #include <stdint.h>
 #include <ctype.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#define sleep Sleep
+#else
+#include <unistd.h>
+#endif
+
 void cbrstd_print(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
     size_t i = 0;
     Token token = expr[i];
@@ -25,12 +32,21 @@ void cbrstd_print(Token *expr, size_t call_exprc, Variables *variables, size_t d
                     Variable var = get_var_by_name(token.sv, variables, depth);
                     if(var.name.data!=NULL){ // if token is variable, get numeric of value and exit
                         if(var.modifyer==MOD_ARRAY){
+                            if(expr[i+1].type!=TOKEN_OSQUAR){
+                                printf("{");
+                                for(size_t j=0; j<var.size-1; j++){
+                                    printf("%zd, ", get_arr_num_value(var, j));
+                                }
+                                printf("%zd", get_arr_num_value(var, var.size-1));
+                                puts("}");
+                                break;
+                            }
                             i++;
                             Token *expr_start = &expr[++i];
                             size_t exprc;
                             COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, expr, i);
                             i++;
-                            int64_t index = evaluate_expr(expr_start, exprc, variables, depth);
+                            ssize_t index = evaluate_expr(expr_start, exprc, variables, depth);
                             printf("%zd", get_arr_num_value(var, index));
                             break;
                         }
@@ -42,7 +58,7 @@ void cbrstd_print(Token *expr, size_t call_exprc, Variables *variables, size_t d
                     Token *expr_start = &expr[i];
                     size_t exprc=0;
                     COLLECT_EXPR(TOKEN_OPAREN, TOKEN_CPAREN, expr, i);
-                    int64_t tmp = evaluate_expr(expr_start, exprc, variables, depth);
+                    ssize_t tmp = evaluate_expr(expr_start, exprc, variables, depth);
                     printf("%zd", tmp);
                 }
                 break;
@@ -64,9 +80,10 @@ void cbrstd_dprint(Token *expr, size_t call_exprc, Variables *variables, size_t 
                 if(var.modifyer==MOD_ARRAY){
                     //debug_variable(var);
                     printf("%s %.*s[%zu] = {", TYPE_TO_STR[var.type], SVVARG(var.name), var.size);
-                    for(size_t j=0; j<var.size; j++){
+                    for(size_t j=0; j<var.size-1; j++){
                         printf("%zd, ", get_arr_num_value(var, j));
                     }
+                    printf("%zd", get_arr_num_value(var, var.size-1));
                     puts("}");
                 } else {
                     printf("%s %.*s = %zd\n", TYPE_TO_STR[var.type],
@@ -90,7 +107,7 @@ void cbrstd_readTo(Token *expr, size_t call_exprc, Variables *variables, size_t 
     while(i<call_exprc){
         switch(token.type){
             case TOKEN_NAME:{
-                int64_t scanned = strtol(str_input, &str_input, 10);
+                ssize_t scanned = strtol(str_input, &str_input, 10);
                 Variable var = get_var_by_name(token.sv, variables, depth);
                 if(var.modifyer==MOD_ARRAY){
                     TOKENERROR(" Error: readTo does notr support arrays, got ")
@@ -117,7 +134,7 @@ void cbrstd_readlnTo(Token *expr, size_t call_exprc, Variables *variables, size_
         switch(token.type){
             case TOKEN_NAME:{
                 Variable var = get_var_by_name(token.sv, variables, depth);
-                int64_t scanned = strtol(str_input, &str_input, 10);
+                ssize_t scanned = strtol(str_input, &str_input, 10);
                 if(var.modifyer==MOD_ARRAY){
                     token = expr[i++];
                     Token *expr_start = &expr[i];
@@ -136,13 +153,13 @@ void cbrstd_readlnTo(Token *expr, size_t call_exprc, Variables *variables, size_
                             arr_id_ptr = (int32_t*)var.ptr+arr_index;
                             break;
                         case TYPE_I64:
-                            arr_id_ptr = (int64_t*)var.ptr+arr_index;
+                            arr_id_ptr = (ssize_t*)var.ptr+arr_index;
                             break;
                         default:
                             break;
                     }
                     var = (Variable){.name = var.name, .modifyer = MOD_NO_MOD, .type = var.type, .ptr = arr_id_ptr};
-                } 
+                }
                 var_num_cast(&var, scanned);
                 break;
             }
@@ -154,7 +171,19 @@ void cbrstd_readlnTo(Token *expr, size_t call_exprc, Variables *variables, size_
     free(str_input_copy);
 }
 
-void (*cbrstd_functions[1024]) (Token*, size_t, Variables*, size_t);
+void cbrstd_sleep(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
+    (void) expr;
+    (void) call_exprc;
+    (void) variables;
+    (void) depth;
+    Token token = expr[0];
+    if(expr[0].type!=TOKEN_NUMERIC){
+        RUNTIMEERROR(" Error: only numerics are supported for std 'sleep' function now")
+    }
+    sleep(SVTOL(expr[0].sv));
+}
+#define STD_CAP 1024
+void (*cbrstd_functions[STD_CAP]) (Token*, size_t, Variables*, size_t);
 
 unsigned long char_hash(char *str){
     unsigned long hash = 5381;
@@ -166,15 +195,16 @@ unsigned long char_hash(char *str){
 }
 
 void setup_cbrstd(void){
-    cbrstd_functions[char_hash("print") % 1024] = &cbrstd_print;
-    cbrstd_functions[char_hash("dprint") % 1024] = &cbrstd_dprint;
-    cbrstd_functions[char_hash("readlnTo") % 1024] = &cbrstd_readlnTo;
-    cbrstd_functions[char_hash("readTo") % 1024] = &cbrstd_readTo;
+    cbrstd_functions[char_hash("print") % STD_CAP] = &cbrstd_print;
+    cbrstd_functions[char_hash("dprint") % STD_CAP] = &cbrstd_dprint;
+    cbrstd_functions[char_hash("readlnTo") % STD_CAP] = &cbrstd_readlnTo;
+    cbrstd_functions[char_hash("readTo") % STD_CAP] = &cbrstd_readTo;
+    cbrstd_functions[char_hash("sleep") % STD_CAP] = &cbrstd_sleep;
 }
 
 CBReturn stdcall(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
     size_t i = 0;
     Token token = expr[i];
-    cbrstd_functions[hash(token.sv)%1024](expr+1, call_exprc-1, variables, depth);
+    cbrstd_functions[hash(token.sv)%STD_CAP](expr+1, call_exprc-1, variables, depth);
     return (CBReturn){.returned=false};
 }
