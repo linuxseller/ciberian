@@ -57,7 +57,7 @@ General
 Data Types
  - [x] `i8 i32 i64`
  - [ ] `u8 u32 u64`
- - [ ] Strings (like Arrays or Class-like thingy)
+ - [x] Strings (like Arrays or Class-like thingy)
  - [x] Arrays
  - [ ] Unsigned types
  - [ ] Pointer modificator
