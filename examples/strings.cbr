@@ -1,0 +1,4 @@
+fn main () : void {
+    string da = "не";
+    std.print da "\n";
+}

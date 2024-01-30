@@ -2,11 +2,10 @@ fn fact(i32 n) : i32 {
     if(n==1){
         return 1;
     }
-    return n*fact(n-1,);
+    return n*fact(n-1);
 }
 
-fn main() : i8 {
-    i64 test=fact(5,);
-    dprint test;
-    return;
+fn main() : void {
+    i64 test=fact(5);
+    std.dprint test;
 }

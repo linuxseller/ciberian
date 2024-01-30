@@ -20,6 +20,12 @@ void printloc(Location loc){
     logf("%s:%lu:%lu", loc.file_path, loc.row, loc.col);
 }
 
+typedef struct Debug {
+    void *token;
+    void *varible;
+    void *block;
+} Debug;
+
 void debug_token(Token token){
     logf("Token {\n");
     logf("\tsv: %.*s\n", SVVARG(token.sv));
@@ -49,6 +55,7 @@ void debug_block(CodeBlock block){
 }
 //Xprint and debug functions
 
+/* Debug debug = {.token=&debug_token, .varible=&debug_variable, .block=&debug_block}; */
 // Hash function for functions TODO: test for variables
 size_t hash(SView sv){
     size_t hash = 5381;
@@ -87,6 +94,8 @@ enum TypeEnum parse_type(Lexer *lexer){
         type = TYPE_U64;
     } else if(SVCMP(token.sv, "string")==0){
         type = TYPE_STRING;
+    } else if(SVCMP(token.sv, "void")==0){
+        type = TYPE_VOID;
     } else {
         TOKENERROR(" Error: unknown type ");
     }
@@ -130,39 +139,50 @@ int get_type_size_in_bytes(enum TypeEnum type){
         case TYPE_U64:
             return 8;
         case TYPE_STRING:
-            return sizeof(SView);
+            return sizeof(Variable);
        default:
            return -1;
     }
 }
 
 // Cast int to variable
-void var_num_cast(Variable *var, ssize_t src){
+void var_cast(Variable *var, CBReturn src){
     bool overflow = false;
     bool underflow = false;
+    if(src.type != var->type && src.type!=TYPE_NUMERIC){
+        logf("Error on assignation of '%s %.*s' to type '%s'\n",
+                TYPE_TO_STR[var->type],
+                SVVARG(var->name),
+                TYPE_TO_STR[src.type]);
+        exit(1);
+    }
     switch(var->type){
+        case TYPE_STRING:
+            var->ptr = src.string.data;
+            var->size = src.string.size;
+            break;
         case TYPE_I8:
-            if(src>INT8_MAX){
+            if(src.num>INT8_MAX){
                 overflow = true;
                 break;
-            } else if(src<INT8_MIN){
+            } else if(src.num<INT8_MIN){
                 underflow = true;
                 break;
             }
-            *(int8_t*)var->ptr = src;
+            *(int8_t*)var->ptr = src.num;
             break;
         case TYPE_I32:
-            if(src>INT32_MAX){
+            if(src.num>INT32_MAX){
                 overflow = true;
                 break;
-            } else if(src<INT32_MIN){
+            } else if(src.num<INT32_MIN){
                 underflow = true;
                 break;
             }
-            *(int32_t*)var->ptr = src;
+            *(int32_t*)var->ptr = src.num;
             break;
         case TYPE_I64:
-            *(ssize_t*)var->ptr = src;
+            *(ssize_t*)var->ptr = src.num;
             break;
         default:
            logf("ERROR: i8 i32 i64 types supported\n");
@@ -172,7 +192,7 @@ void var_num_cast(Variable *var, ssize_t src){
         logf("Error on assignation, %s %s in (tryed assigning %zd to '%.*s')\n",
                 TYPE_TO_STR[var->type],
                 (underflow)?"underflow":"overflow",
-                src, SVVARG(var->name));
+                src.num, SVVARG(var->name));
         if(verbose){
             logf("Type %s value range is ", TYPE_TO_STR[var->type]);
             switch(var->type){
@@ -198,9 +218,10 @@ void copy_array(Variable dst, Variable src){
         exit(1);
     }
     switch(src.type){
+        case TYPE_STRING:
         case TYPE_I8:
             for(size_t i=0; i<src.size; i++){
-                *((int8_t*)dst.ptr+1) = *((int8_t*)src.ptr+i);
+                *((int8_t*)dst.ptr+i) = *((int8_t*)src.ptr+i);
             }
             break;
         case TYPE_I32:
@@ -260,8 +281,8 @@ Func parse_function(Lexer *lexer){
         TOKENERROR(" Error: expected '{', got ");
     }
     int depth_level = 1;
-    func.body.code = malloc(sizeof(Token)*100);
-    for(int i=0, e = 100; token.type!=TOKEN_CCURLY || depth_level>0; i++){
+    func.body.code = malloc(sizeof(Token)*200);
+    for(int i=0, e = 200; token.type!=TOKEN_CCURLY || depth_level>0; i++){
         if(i>=e){
             e+=50;
             func.body.code = realloc(func.body.code, e);
@@ -368,15 +389,21 @@ Variable get_var_from_arr(Variable arr_var, ssize_t arr_index){
     return var;
 }
 
-ssize_t evaluate_expr(Token *expr, ssize_t expr_size, Variables *variables, size_t depth){
+CBReturn evaluate_expr(Token *expr, ssize_t expr_size, Variables *variables, size_t depth){
     RpnObject *stack = malloc(sizeof(RpnObject)*expr_size);
     RpnObject *postfix = malloc(sizeof(RpnObject)*expr_size);
     ssize_t value;
     Variable var;
+    CBReturn rval;
     int top = -1;
     int j = 0;
     for(int i = 0; i<expr_size; i++){
         switch(expr[i].type){
+            case TOKEN_STR_LITERAL:
+                rval.type = TYPE_STRING;
+                rval.string = expr[i].sv;
+                goto eval_expr_ret;
+                break;
             case TOKEN_OP_DIV:
             case TOKEN_OP_MUL:
             case TOKEN_OP_PLUS:
@@ -411,7 +438,7 @@ ssize_t evaluate_expr(Token *expr, ssize_t expr_size, Variables *variables, size
                                 Token *expr_start = &expr[i];
                                 size_t exprc=0;
                                 COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, expr, i);
-                                size_t arr_index = evaluate_expr(expr_start, exprc, variables, depth);
+                                size_t arr_index = evaluate_expr(expr_start, exprc, variables, depth).num;
                                 Variable var_ret = get_var_from_arr(var, arr_index);
                                 value = get_num_value(var_ret, token.loc);
                             } else {
@@ -426,6 +453,7 @@ ssize_t evaluate_expr(Token *expr, ssize_t expr_size, Variables *variables, size
                         break;
                     }
                 // function call handling
+#include "tmp.c"
                 }
             default:break;
         }
@@ -461,7 +489,10 @@ ssize_t evaluate_expr(Token *expr, ssize_t expr_size, Variables *variables, size
         }
         top++;
     }
-    ssize_t rval = stack[top-1].numeric;
+    rval.type = TYPE_NUMERIC;
+    rval.num = stack[top-1].numeric;
+    rval.returned = true;
+eval_expr_ret:
     free(stack);
     free(postfix);
     return rval;
@@ -478,8 +509,8 @@ bool evaluate_bool_expr(Token *expr, ssize_t expr_size, Variables *variables, si
     enum TokenEnum token_op = expr[left_expr_size].type;
     Token token_op_next = expr[left_expr_size+1];
     ssize_t right_expr_size = expr_size-left_expr_size-1;
-    ssize_t left_value = evaluate_expr(expr, left_expr_size, variables, depth);
-    ssize_t right_value = evaluate_expr(expr+left_expr_size+1, right_expr_size, variables, depth);
+    ssize_t left_value = evaluate_expr(expr, left_expr_size, variables, depth).num;
+    ssize_t right_value = evaluate_expr(expr+left_expr_size+1, right_expr_size, variables, depth).num;
     switch(token_op){
         case TOKEN_OP_LESS:
             if(token_op_next.type==TOKEN_EQUAL_SIGN){
@@ -529,15 +560,20 @@ CBReturn evaluate_code_block(CodeBlock block){
                             token    = block.code[++i];
                             var.name = token.sv;
                             if(block.code[i+1].type != TOKEN_OSQUAR){
-                                var.modifyer = MOD_NO_MOD;
-                                var.ptr  = malloc(get_type_size_in_bytes(var.type));
+                                if(var.type==TYPE_STRING){
+                                    var.modifyer = MOD_ARRAY;
+                                    var.ptr = malloc(token.sv.size+1); //TODO: ram leak?
+                                } else {
+                                    var.modifyer = MOD_NO_MOD;
+                                    var.ptr  = malloc(get_type_size_in_bytes(var.type));
+                                }
                             } else { // variable is array
                                 token = block.code[i++];
                                 var.modifyer = MOD_ARRAY;
                                 Token *expr_start = &block.code[i];
                                 size_t exprc=0;
                                 COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, block.code, i);
-                                size_t arrlen = evaluate_expr(expr_start, exprc, block.variables, block.depth);
+                                size_t arrlen = evaluate_expr(expr_start, exprc, block.variables, block.depth).num;
                                 var.ptr = malloc(get_type_size_in_bytes(var.type)*arrlen);
                                 var.size = arrlen;
                             }
@@ -548,22 +584,15 @@ CBReturn evaluate_code_block(CodeBlock block){
                                 block.variables[block.depth].variables =
                                     realloc(block.variables[block.depth].variables, sizeof(Variable)*(block.variables[block.depth].varc+1));
                             }
-                            if(var.modifyer == MOD_ARRAY){
+                            if(var.modifyer == MOD_ARRAY && var.type!=TYPE_STRING){
                                 size_t varc = block.variables[block.depth].varc;
                                 block.variables[block.depth].variables[varc] = var;
                                 block.variables[block.depth].varc++;
-                                token=block.code[++i];
-                                break;
                             } // array initialisation not supported for now
                         } else {
                             var = get_var_by_name(token.sv, block.variables, block.depth);
                         }
-                        if(var.type == TYPE_STRING){
-                            printloc(token.loc);
-                            logf(" Error: strings are unsupported\n");
-                            exit(1);
-                        }
-                        if(block.code[i+1].type == TOKEN_OSQUAR){ // if square bracket after variable name, then it is acces to array.
+                        if(block.code[i+1].type == TOKEN_OSQUAR && !new_var){ // if square bracket after variable name, then it is acces to array.
                             if(var.modifyer!=MOD_ARRAY){
                                 TOKENERROR(" Error: trying to use usual variable as array, expected '[', got ");
                             }
@@ -571,7 +600,7 @@ CBReturn evaluate_code_block(CodeBlock block){
                             Token *expr_start = &block.code[++i];
                             size_t exprc=0;
                             COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, block.code, i);
-                            size_t arr_index = evaluate_expr(expr_start, exprc, block.variables, block.depth);
+                            size_t arr_index = evaluate_expr(expr_start, exprc, block.variables, block.depth).num;
                             void *arr_id_ptr=NULL;
                             if(arr_index>=var.size || arr_index<0){
                                 printloc(token.loc);
@@ -598,17 +627,14 @@ CBReturn evaluate_code_block(CodeBlock block){
                         switch(op_token.type){
                             case TOKEN_EQUAL_SIGN:{
                                 token = block.code[++i];
-                                if (token.type==TOKEN_STR_LITERAL) {
-                                    TOKENERROR(" Error: strings are unsupported ")
-                                }
                                 int expr_size = 0;
                                 Token *expr_start = &block.code[i];
                                 while(token.type != TOKEN_SEMICOLON){
                                     token = block.code[++i];
                                     expr_size++;
                                 }
-                                ssize_t val = evaluate_expr(expr_start, expr_size, block.variables, block.depth);
-                                var_num_cast(&var, val);
+                                CBReturn val = evaluate_expr(expr_start, expr_size, block.variables, block.depth);
+                                var_cast(&var, val);
                                 size_t varc = block.variables[block.depth].varc;
                                 if(new_var){
                                     block.variables[block.depth].variables[varc] = var;
@@ -617,7 +643,7 @@ CBReturn evaluate_code_block(CodeBlock block){
                                 break;
                             }
                             case TOKEN_SEMICOLON:{
-                                var_num_cast(&var, 0);
+                                var_cast(&var, (CBReturn){.type=TYPE_NUMERIC, .num=0});
                                 size_t varc = block.variables[block.depth].varc;
                                 block.variables[block.depth].variables[varc] = var;
                                 if(new_var){
@@ -636,22 +662,28 @@ CBReturn evaluate_code_block(CodeBlock block){
                                         token = block.code[++i];
                                         expr_size++;
                                     }
-                                    ssize_t val = evaluate_expr(expr_start, expr_size, block.variables, block.depth);
+                                    ssize_t val = evaluate_expr(expr_start, expr_size, block.variables, block.depth).num;
+                                    CBReturn tmpret;
+                                    tmpret.type = TYPE_NUMERIC;
                                     switch(op_token.type){
                                     case TOKEN_OP_PLUS:
-                                        var_num_cast(&var, get_num_value(var, token.loc)+val);
+                                        tmpret.num = get_num_value(var, token.loc)+val;
+                                        var_cast(&var, tmpret);
                                         break;
                                     case TOKEN_OP_MINUS:
-                                        var_num_cast(&var, get_num_value(var, token.loc)-val);
+                                        tmpret.num = get_num_value(var, token.loc)+val;
+                                        var_cast(&var, tmpret);
                                         break;
                                     case TOKEN_OP_MUL:
-                                        var_num_cast(&var, get_num_value(var, token.loc)*val);
+                                        tmpret.num = get_num_value(var, token.loc)+val;
+                                        var_cast(&var, tmpret);
                                         break;
                                     case TOKEN_OP_DIV:
-                                        var_num_cast(&var, get_num_value(var, token.loc)/val);
+                                        tmpret.num = get_num_value(var, token.loc)+val;
+                                        var_cast(&var, tmpret);
                                         break;
                                     default:
-                                        TOKENERROR(" Error: expected ' = ' or ';', got ");
+                                        TOKENERROR(" Error: expected '=' or ';', got ");
                                     }
                                     size_t varc = block.variables[block.depth].varc;
                                     if(new_var){
@@ -660,14 +692,27 @@ CBReturn evaluate_code_block(CodeBlock block){
                                     }
                             }
                         }
-                    } else {
+                    } else { // should be function call
+                       bool is_stdcall=false;
+                        if(SVCMP(block.code[i].sv, "std")==0){
+                            if(block.code[i+1].type!=TOKEN_DOT){
+                                token = block.code[i+1];
+                                TOKENERROR("expected '.' after 'std' in stdcall");
+                            }
+                            i+=2;
+                            is_stdcall = true;
+                        }
                         Token *expr_start = &block.code[i];
                         size_t exprc = 0;
                         while(token.type != TOKEN_SEMICOLON){
                             token = block.code[++i];
                             exprc++;
                         }
-                        stdcall(expr_start, exprc, block.variables, block.depth);
+                        if(is_stdcall){
+                            stdcall(expr_start, exprc, block.variables, block.depth);
+                        } else {
+                            evaluate_expr(expr_start, exprc, block.variables, block.depth);
+                        }
                     }
                 }
                 break;
@@ -793,7 +838,13 @@ CBReturn evaluate_code_block(CodeBlock block){
                     token = block.code[++i];
                     exprc++;
                 }
-                ret.value = evaluate_expr(expr_start, exprc, block.variables, block.depth);
+                CBReturn ret_val = evaluate_expr(expr_start, exprc, block.variables, block.depth);
+                if(ret_val.type==TYPE_STRING){
+                    ret.string = ret_val.string;
+                } else {
+                    ret.num = ret_val.num;
+                }
+                ret.type = ret_val.type;
                 ret.returned = true;
                 while(block.variables[block.depth].varc--){
                     free(block.variables[block.depth].variables[block.variables[block.depth].varc].ptr);
@@ -867,6 +918,10 @@ int main(int argc, char **argv){
     }
     // Interpritation
     fn = functions[hash((SView){"main", 4})%1024];
+    if(fn.ret_type==TYPE_NOT_A_TYPE){
+        logf("Error: could not find entry point 'fn main'\n");
+        exit(69);
+    }
     fn.body.depth = 1;
     setup_cbrstd();
     for (size_t i = 0; i < fn.body.exprc; i++) {

@@ -31,6 +31,10 @@ void cbrstd_print(Token *expr, size_t call_exprc, Variables *variables, size_t d
                 {
                     Variable var = get_var_by_name(token.sv, variables, depth);
                     if(var.name.data!=NULL){ // if token is variable, get numeric of value and exit
+                        if(var.modifyer==MOD_ARRAY && var.type==TYPE_STRING){
+                            printf("%.*s", (int)var.size, (char*)var.ptr);
+                            break;
+                        }
                         if(var.modifyer==MOD_ARRAY){
                             if(expr[i+1].type!=TOKEN_OSQUAR){
                                 printf("{");
@@ -38,7 +42,7 @@ void cbrstd_print(Token *expr, size_t call_exprc, Variables *variables, size_t d
                                     printf("%zd, ", get_arr_num_value(var, j));
                                 }
                                 printf("%zd", get_arr_num_value(var, var.size-1));
-                                puts("}");
+                                printf("}");
                                 break;
                             }
                             i++;
@@ -46,7 +50,7 @@ void cbrstd_print(Token *expr, size_t call_exprc, Variables *variables, size_t d
                             size_t exprc;
                             COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, expr, i);
                             i++;
-                            ssize_t index = evaluate_expr(expr_start, exprc, variables, depth);
+                            ssize_t index = evaluate_expr(expr_start, exprc, variables, depth).num;
                             printf("%zd", get_arr_num_value(var, index));
                             break;
                         }
@@ -58,7 +62,7 @@ void cbrstd_print(Token *expr, size_t call_exprc, Variables *variables, size_t d
                     Token *expr_start = &expr[i];
                     size_t exprc=0;
                     COLLECT_EXPR(TOKEN_OPAREN, TOKEN_CPAREN, expr, i);
-                    ssize_t tmp = evaluate_expr(expr_start, exprc, variables, depth);
+                    ssize_t tmp = evaluate_expr(expr_start, exprc, variables, depth).num;
                     printf("%zd", tmp);
                 }
                 break;
@@ -112,7 +116,8 @@ void cbrstd_readTo(Token *expr, size_t call_exprc, Variables *variables, size_t 
                 if(var.modifyer==MOD_ARRAY){
                     TOKENERROR(" Error: readTo does notr support arrays, got ")
                 }
-                var_num_cast(&var, scanned);
+                CBReturn tmpret = {.type=TYPE_I64, .num=scanned};
+                var_cast(&var, tmpret);
                 break;
             }
             default:
@@ -143,7 +148,7 @@ void cbrstd_readlnTo(Token *expr, size_t call_exprc, Variables *variables, size_
                         token = expr[++i];
                         expr_size++;
                     }
-                    size_t arr_index = evaluate_expr(expr_start, expr_size, variables, depth);
+                    size_t arr_index = evaluate_expr(expr_start, expr_size, variables, depth).num;
                     void *arr_id_ptr=NULL;
                     switch(var.type){
                         case TYPE_I8:
@@ -160,7 +165,8 @@ void cbrstd_readlnTo(Token *expr, size_t call_exprc, Variables *variables, size_
                     }
                     var = (Variable){.name = var.name, .modifyer = MOD_NO_MOD, .type = var.type, .ptr = arr_id_ptr};
                 }
-                var_num_cast(&var, scanned);
+                CBReturn tmpret = {.type=TYPE_I64, .num=scanned};
+                var_cast(&var, tmpret);
                 break;
             }
             default:

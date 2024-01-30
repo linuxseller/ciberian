@@ -29,22 +29,28 @@
                             token = expr[++i];
                             token = expr[++i];
                         } else { // if var not array
-                            token = expr[++i];
+                            token = expr[i];
                             Token *arg_expr_start = &expr[i];
                             int arg_exprc = 0;
-                            while(token.type != TOKEN_COMMA){
-                                if(token.type == TOKEN_CPAREN){
+                            for(int depth_level=1; token.type != TOKEN_COMMA && depth_level!=0;){
+                                if(token.type == TOKEN_CPAREN && depth_level==0){
+                                    logf("Expected '%s %.*s' as argument, got nothing\n",
+                                                TYPE_TO_STR[var.type], SVVARG(var.name));
                                     TOKENERROR(" Error: uhhm, bruh. You forgor some arguments ")
                                 }
                                 token = expr[++i];
+                                switch(token.type){
+                                    case TOKEN_OPAREN:depth_level++;break;
+                                    case TOKEN_CPAREN:depth_level--;break;
+                                    default:break;
+                                }
                                 arg_exprc++;
                             }
                             token = expr[++i];
-                            int64_t argument_value = evaluate_expr(arg_expr_start, arg_exprc, variables, depth);
+                            CBReturn argument_value = evaluate_expr(arg_expr_start, arg_exprc, variables, depth);
                             var.ptr = malloc(get_type_size_in_bytes(var.type));
-                            var_num_cast(&var, argument_value);
+                            var_cast(&var, argument_value);
                         }
-
                         if(variables[depth].varc == 0){
                             fn_to_call.body.variables[1].variables = malloc(sizeof(Variable));
                         } else {
@@ -62,7 +68,7 @@
                         token = expr[++i];
                     }
                     postfix[j].type = RPN_NUM;
-                    postfix[j].numeric = evaluate_code_block(fn_to_call.body).value;
+                    postfix[j].numeric = evaluate_code_block(fn_to_call.body).num;
                     j++;
                     break;
                     //-function-call-handling-

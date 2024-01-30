@@ -1,8 +1,8 @@
-fn main() : i8 {
+fn main() : void {
     i64 a;
     i64 b;
     i64 c;
-    readlnTo a b c;
-    dprint a b c;
+    std.readlnTo a b c;
+    std.dprint a b c;
     return;
 }

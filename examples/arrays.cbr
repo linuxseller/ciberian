@@ -2,7 +2,7 @@
 # fill it with 1000-7 meme
 # 2. print it
 
-fn main() : i8 {
+fn main() : void {
     i32 arr[143];
     i32 counter = 1000;
     i32 i = 0;
@@ -11,6 +11,6 @@ fn main() : i8 {
         counter=counter-7;
         i = i+1;
     }
-    dprint i;
-    dprint arr;
+    std.dprint i;
+    std.dprint arr;
 }

@@ -1,0 +1,22 @@
+fn min(i8 a[]) : i8 {
+    i8 min = a[0];
+    i32 i;
+    while(i<a.length){
+        if(min<a[i]){
+            min=a[i];
+        }
+        i+=1;
+    }
+    return min;
+}
+
+fn main() : void {
+    i8 a[4];
+    std.print "Hi\n";
+    a[0]=1;
+    a[1]=10;
+    a[2]=5;
+    a[3]=7;
+    i8 res = min(a);
+    std.print "min(" a ")=" res "\n";
+}

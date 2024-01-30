@@ -1,8 +1,8 @@
-fn main () : i8 {
+fn main () : void {
     i32 count = 1000;
     while(count>0){
-        print count " - 7 = ";
+        std.print count " - 7 = ";
         count = count - 7;
-        print count "\n";
+        std.print count "\n";
     }
 }

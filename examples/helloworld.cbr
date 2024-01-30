@@ -1,4 +1,4 @@
 # Hello world example
-fn main() : i8 {
-    print "Hello World!\n";
+fn main() : void {
+    std.print "Hello World!\n";
 }

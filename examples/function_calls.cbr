@@ -1,0 +1,23 @@
+fn min(i32 a, i32 b) : i32 {
+    if(a<b){
+        return a;
+    }
+    return b;
+}
+
+fn max(i32 a, i32 b) : i32 {
+    if(a>b){
+        return a;
+    }
+    return b;
+}
+
+fn main() : void {
+    i32 a = 100;
+    i32 b = 2;
+    i32 e = min(a,b);
+    std.print "result: \n";
+    std.print "min(" a "," b ")=" e "\n";
+    e = max(a,b);
+    std.print "max(" a "," b ")=" e "\n";
+}

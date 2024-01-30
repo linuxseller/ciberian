@@ -64,6 +64,8 @@ Token next_token(Lexer *this){
             token_type = TOKEN_TRUE;
         } else if(SVCMP(sv, "false")==0){
             token_type = TOKEN_FALSE;
+        } else if(SVCMP(sv, "void")==0){
+            token_type = TOKEN_VOID;
         } else {
             token_type = TOKEN_NAME;
         }

@@ -39,7 +39,9 @@
 }
 enum TypeEnum {
     TYPE_NOT_A_TYPE,
+    TYPE_NUMERIC,
     TYPE_STRING,
+    TYPE_VOID,
     TYPE_I8,
     TYPE_I32,
     TYPE_I64,
@@ -49,15 +51,23 @@ enum TypeEnum {
 };
 
 char *TYPE_TO_STR[]={
+    [TYPE_VOID   ] = "void",
     [TYPE_I8     ] = "i8",
     [TYPE_I32    ] = "i32",
     [TYPE_I64    ] = "i64",
     [TYPE_STRING ] = "string"
 };
-
 typedef struct {
-    bool returned; 
-    ssize_t value;
+    char *data;
+    size_t size;
+} SView;
+typedef struct {
+    bool returned;
+    enum TypeEnum type;
+    union {
+        ssize_t num;
+        SView string;
+    };
 } CBReturn;
 
 enum TokenEnum {
@@ -89,7 +99,8 @@ enum TokenEnum {
     TOKEN_WHILE,
     TOKEN_DOT,
     TOKEN_TRUE,
-    TOKEN_FALSE
+    TOKEN_FALSE,
+    TOKEN_VOID
 };
 
 char *TOKEN_TO_STR[] = {
@@ -121,7 +132,8 @@ char *TOKEN_TO_STR[] = {
     [TOKEN_CSQUAR       ] = "TOKEN_CSQUAR",
     [TOKEN_DOT          ] = "TOKEN_DOT",
     [TOKEN_TRUE         ] = "TOKEN_TRUE",
-    [TOKEN_FALSE         ] = "TOKEN_FLASE"
+    [TOKEN_FALSE        ] = "TOKEN_FLASE",
+    [TOKEN_VOID         ] = "TOKEN_VOID"
 };
 
 enum ModifyerEnum {
@@ -136,10 +148,7 @@ char *MOD_TO_STR[] = {
     [MOD_PTR    ] = "MOD_PTR"
 };
 
-typedef struct {
-    char *data;
-    size_t size;
-} SView;
+
 
 typedef struct {
     char *file_name;
