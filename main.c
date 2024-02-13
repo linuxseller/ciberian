@@ -15,16 +15,9 @@
 
 Func functions[1024] = {0};
 
-// print and debug functions
 void printloc(Location loc){
     logf("%s:%lu:%lu", loc.file_path, loc.row, loc.col);
 }
-
-typedef struct Debug {
-    void *token;
-    void *varible;
-    void *block;
-} Debug;
 
 void debug_token(Token token){
     logf("Token {\n");
@@ -53,10 +46,9 @@ void debug_block(CodeBlock block){
     }
     logf("}\n");
 }
-//Xprint and debug functions
 
-/* Debug debug = {.token=&debug_token, .varible=&debug_variable, .block=&debug_block}; */
-// Hash function for functions TODO: test for variables
+// Hash function for function names
+// TODO: test for variables
 size_t hash(SView sv){
     size_t hash = 5381;
     int c;
@@ -74,7 +66,7 @@ void usage(char *program_name){
     logf("flags:\n");
     logf("\t--verbose : provides additional info\n");
 }
-// verbose output on error
+// TODO: verbose output on error
 bool verbose = false;
 
 enum TypeEnum parse_type(Lexer *lexer){
@@ -109,7 +101,7 @@ enum TypeEnum token_variable_type(Token token){
     } else if(SVCMP(token.sv, "i32")==0){
         type = TYPE_I32;
     } else if(SVCMP(token.sv, "i64")==0){
-        if(sizeof(size_t)!=sizeof(ssize_t)){
+        if(sizeof(size_t)!=8){
             TOKENERROR(" Error: i64 not supported on this architecture");
         }
         type = TYPE_I64;
@@ -147,8 +139,12 @@ int get_type_size_in_bytes(enum TypeEnum type){
 
 // Cast int to variable
 void var_cast(Variable *var, CBReturn src){
+    // variables that track over- and under-flows of integer types
     bool overflow = false;
     bool underflow = false;
+    // Type checking
+    // * mostly, assignation occurs on result of evaluate_expr function, which MUST calculate type of expression
+    // * if expression is numeric, that it can be assigned to anything that is not overflow or underflowed
     if(src.type != var->type && src.type!=TYPE_NUMERIC){
         logf("Error on assignation of '%s %.*s' to type '%s'\n",
                 TYPE_TO_STR[var->type],
@@ -185,7 +181,7 @@ void var_cast(Variable *var, CBReturn src){
             *(ssize_t*)var->ptr = src.num;
             break;
         default:
-           logf("ERROR: i8 i32 i64 types supported\n");
+           logf("ERROR: i8 i32 i64 and string types supported for assignement\n");
            exit(1);
     }
     if(overflow||underflow){
@@ -214,7 +210,8 @@ void var_cast(Variable *var, CBReturn src){
 
 void copy_array(Variable dst, Variable src){
     if(dst.type!=src.type){
-        logf(" ERROR: array assignation types mismatch\n");
+        logf("ERROR: array copying types mismatch\n");
+        logf("tried assigning %s[%zd] to %s[%zd]\n", TYPE_TO_STR[src.type], src.size, TYPE_TO_STR[dst.type], dst.size);
         exit(1);
     }
     switch(src.type){
@@ -252,8 +249,8 @@ Func parse_function(Lexer *lexer){
     func.args = malloc(sizeof(Var_signature)*10);
     token = next_token(lexer);
     while(token.type!=TOKEN_CPAREN){
-        enum TypeEnum type = token_variable_type(token); // getting type
-        token = next_token(lexer); // getting arg name
+        enum TypeEnum type = token_variable_type(token);      // getting type
+        token = next_token(lexer);                            // getting arg name
         if(token.type!=TOKEN_NAME){
             TOKENERROR(" Error: wanted variable name, got ");
         }
@@ -462,10 +459,6 @@ CBReturn evaluate_expr(Token *expr, ssize_t expr_size, Variables *variables, siz
         postfix[j++] = stack[top--];
     }
     top = 0;
-    /* if(postfix[0].oper.type==TOKEN_OP_MINUS){ */
-    /*     debug_token(postfix[0].oper); */
-    /*     postfix[1].numeric=-postfix[1].numeric; */
-    /* } */
     for(int i = 0; i<j; i++){
         stack[top] = postfix[i];
         if(stack[top].type == RPN_OPERATOR){
