@@ -1,6 +1,6 @@
 #include "types.h"
 
-void chop_char(Lexer *this){
+void lexer_chop_char(Lexer *this){
     if(CURR=='\0'){
         return;
     }
@@ -12,31 +12,31 @@ void chop_char(Lexer *this){
     }
 }
 
-void trim_left(Lexer *this){
+void lexer_trim_left(Lexer *this){
     while(isspace(CURR) && CURR!='\0'){
-      chop_char(this);
+      lexer_chop_char(this);
     }
 }
 
-void drop_line(Lexer *this) {
+void lexer_drop_line(Lexer *this) {
     while(CURR!='\n' && CURR!='\0') {
         /* printf("dropped: %c\n", CURR); */
-        chop_char(this);
+        lexer_chop_char(this);
     }
     if (CURR!='\0') {
-        chop_char(this);
+        lexer_chop_char(this);
     }
 }
 
-Token next_token(Lexer *this){
-    trim_left(this);
+Token lexer_next_token(Lexer *this){
+    lexer_trim_left(this);
     SView sv = {0};
     char first_char = CURR;
     while(first_char=='#'){
-        drop_line(this);
+        lexer_drop_line(this);
         first_char = CURR;
     }
-    trim_left(this);
+    lexer_trim_left(this);
     first_char = CURR;
     Location loc = {.col       = this->pos-this->bol+1,
                     .row       = this->line,
@@ -47,7 +47,7 @@ Token next_token(Lexer *this){
     enum TokenEnum token_type;
     if(isalpha(first_char)){
         while(CURR!='\0' && isalnum(CURR)) {
-           chop_char(this);
+           lexer_chop_char(this);
         }
         sv.size = this->pos - start;
         if(SVCMP(sv, "fn")==0){
@@ -73,7 +73,7 @@ Token next_token(Lexer *this){
     }
     if(isdigit(first_char)){
         while(CURR!='\0' && isdigit(CURR)) {
-            chop_char(this);
+            lexer_chop_char(this);
             sv.size = this->pos - start;
         }
             return (Token){.loc=loc, .sv=sv, .type=TOKEN_NUMERIC};
@@ -117,13 +117,13 @@ Token next_token(Lexer *this){
         case '!':
             token_type = TOKEN_OP_NOT; break;
         case '"': { // parsing string literal
-                    chop_char(this);
+                    lexer_chop_char(this);
                     token_type = TOKEN_STR_LITERAL;
                     size_t str_lit_len = strpbrk(this->source+this->pos ,"\"") - (this->source + this->pos);
                     sv.data = calloc(str_lit_len+1, 1);
                     for(int i=0; CURR != '"'; i++){
                         if(CURR=='\\'){
-                            chop_char(this);
+                            lexer_chop_char(this);
                             switch(CURR){
                                 case 'n':
                                     sv.data[i]='\n'; break;
@@ -134,16 +134,16 @@ Token next_token(Lexer *this){
                                 case '"':
                                     sv.data[i]='\"'; break;
                             }
-                            chop_char(this);
+                            lexer_chop_char(this);
                             continue;
                         }
                         sv.data[i]=CURR;
-                        chop_char(this);
+                        lexer_chop_char(this);
                     }
                     sv.size = str_lit_len;
                     break;
                   } // token string literal
     }
-    chop_char(this);
+    lexer_chop_char(this);
     return (Token){.loc=loc, .sv=sv, .type=token_type};
 }

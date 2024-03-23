@@ -10,7 +10,7 @@ void usage(char *program_name);
 char *args_shift(int *argc, char ***argv);
 enum TypeEnum parse_type(Lexer *lexer);
 enum TypeEnum token_variable_type(Token token);
-int get_type_size_in_bytes(enum TypeEnum type);
+ssize_t get_type_size_in_bytes(enum TypeEnum type);
 void var_cast(Variable *var, CBReturn src);
 Func parse_function(Lexer *lexer);
 ssize_t get_num_value(Variable var, Location loc);

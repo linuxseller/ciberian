@@ -70,6 +70,7 @@
                     postfix[j].type = RPN_NUM;
                     postfix[j].numeric = evaluate_code_block(fn_to_call.body).num;
                     j++;
+                    free(fn_to_call.body.variables);
                     break;
                     //-function-call-handling-
                     }

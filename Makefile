@@ -1,4 +1,4 @@
-CFLAGS=-Wall -Wextra -Werror -pedantic -ggdb3
+CFLAGS=-Wall -Wextra -Werror -pedantic -gfull
 CLIBS=-L. -I.
 OUTFILE=ciberia
 CC=clang
@@ -6,6 +6,6 @@ CC=clang
 all: compile
 
 compile:
-	$(CC) $(CFLAGS) main.c -o $(OUTFILE) $(CLIBS)
+	$(CC) $(CFLAGS) src/main.c -o $(OUTFILE) $(CLIBS)
 run: compile
 	./$(OUTFILE) --verbose ./test.cbr

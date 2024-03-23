@@ -165,7 +165,7 @@ void cbrstd_readlnTo(Token *expr, size_t call_exprc, Variables *variables, size_
                     }
                     var = (Variable){.name = var.name, .modifyer = MOD_NO_MOD, .type = var.type, .ptr = arr_id_ptr};
                 }
-                CBReturn tmpret = {.type=TYPE_I64, .num=scanned};
+                CBReturn tmpret = {.type=var.type, .num=scanned};
                 var_cast(&var, tmpret);
                 break;
             }

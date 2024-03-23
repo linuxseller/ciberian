@@ -1,7 +1,7 @@
 fn main() : void {
-    i64 input;
+    i32 input;
     i8 tries;
-    i64 a=50;
+    i32 a=50;
     i32 guesses[3];
     std.print "Hello, guess a numba between 1 and 99 :Zezin:\n";
     while(tries!=3){

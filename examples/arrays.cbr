@@ -3,8 +3,12 @@
 # 2. print it
 
 fn main() : void {
+    i8 eee = 128-1;
+    std.dprint eee;
     i32 arr[143];
+    std.print "Here1\n";
     i32 counter = 1000;
+    std.print "Here2\n";
     i32 i = 0;
     while(counter>0){
         std.print i"\n";

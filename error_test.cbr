@@ -1,6 +1,0 @@
-fn main() : void {
-    print "Testing error on assignement\n";
-    i32 a[1];
-    i8  b[1];
-    
-}
