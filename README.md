@@ -3,28 +3,26 @@
 Ciberian strongly statically typed interpreted language written in C
 
 ```rust
-fn main {
-    print "Hello" " World!";
+fn main() : void {
+    std.print "Hello" " World!\n";
 }
 ```
 # 1000-7=ghoul
 ```rust
-fn main () : i8 {
+fn main () : void {
     i32 count = 1000;
     while(count>0){
-        print count " - 7 = ";
+        std.print count " - 7 = ";
         count = count - 7;
-        print count "\n";
+        std.print count "\n";
     }
 }
 ```
 
-for now it can only print string literals.
-
 # compiling
 
 ```console
-$ make # or cc main.c -o ciberian
+$ make # or cc src/main.c -o ciberian
 ```
 
 # running
