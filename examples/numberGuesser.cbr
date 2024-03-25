@@ -1,11 +1,18 @@
 fn main() : void {
     i32 input;
     i8 tries;
-    i32 a=50;
-    i32 guesses[3];
+    i8 maxTries;
+    std.print "Enter number of tries: ";
+    std.readlnTo maxTries;
+    while(maxTries<1){
+        std.print "tries amount can be >1. Enter again:";
+        std.readlnTo maxTries;
+    }
+    i32 a=std.random()%100;
+    i32 guesses[maxTries];
     std.print "Hello, guess a numba between 1 and 99 :Zezin:\n";
-    while(tries!=3){
-        std.print "Input try[" tries "/3]: ";
+    for(i8 tries; tries<maxTries; tries+=1;){
+        std.print "Input try[" tries "/" maxTries "]: ";
         std.readlnTo input;
         guesses[tries]=input;
         if(input==a){
@@ -17,7 +24,6 @@ fn main() : void {
         } else {
             std.print "Value is smaller.\n";
         }
-        tries+=1;
     }
     std.print "Game finished Loozer!\n";
     std.print "Your guesses: "guesses"\n";
