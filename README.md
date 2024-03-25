@@ -46,7 +46,7 @@ Main Aims
 General
  - [ ] String literals
  - [ ] `#import` directive
- - [ ] For loops
+ - [x] For loops
  - [ ] Else If
  - [ ] Syscalls
  - [ ] Allow `_` in function & variable names
@@ -54,10 +54,10 @@ General
 
 Data Types
  - [x] `i8 i32 i64`
- - [ ] `u8 u32 u64`
  - [x] Strings (like Arrays or Class-like thingy)
  - [x] Arrays
  - [ ] Unsigned types
+ - [ ] Float types
  - [ ] Pointer modificator
  - [ ] User provided Structs
 
