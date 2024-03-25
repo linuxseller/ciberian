@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <ctype.h>
+#include <time.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -16,7 +17,8 @@
 #include <unistd.h>
 #endif
 
-void cbrstd_print(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
+CBReturn cbrstd_print(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
+    CBReturn ret = {.returned=false, .type=0, .num=0};
     size_t i = 0;
     Token token = expr[i];
     while(i<call_exprc){
@@ -71,9 +73,11 @@ void cbrstd_print(Token *expr, size_t call_exprc, Variables *variables, size_t d
         }
         token = expr[++i];
     }
+    return ret;
 }
 
-void cbrstd_dprint(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
+CBReturn cbrstd_dprint(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
+    CBReturn ret = {.returned=false, .type=0, .num=0};
     size_t i=0;
     Token token = expr[i];
     Variable var;
@@ -99,9 +103,11 @@ void cbrstd_dprint(Token *expr, size_t call_exprc, Variables *variables, size_t 
         }
         token = expr[++i];
     }
+    return ret;
 }
 
-void cbrstd_readTo(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
+CBReturn cbrstd_readTo(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
+    CBReturn ret = {.returned=false, .type=0, .num=0};
     size_t i=0;
     Token token = expr[i];
     int mlced=256;
@@ -126,9 +132,11 @@ void cbrstd_readTo(Token *expr, size_t call_exprc, Variables *variables, size_t 
         token = expr[++i];
     }
     free(str_input_copy);
+    return ret;
 }
 
-void cbrstd_readlnTo(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
+CBReturn cbrstd_readlnTo(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
+    CBReturn ret = {.returned=false, .type=0, .num=0};
     size_t i=0;
     Token token = expr[i];
     int mlced=256;
@@ -175,21 +183,34 @@ void cbrstd_readlnTo(Token *expr, size_t call_exprc, Variables *variables, size_
         token = expr[++i];
     }
     free(str_input_copy);
+    return ret;
 }
 
-void cbrstd_sleep(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
+CBReturn cbrstd_sleep(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
     (void) expr;
     (void) call_exprc;
     (void) variables;
     (void) depth;
+    CBReturn ret = {.returned=false, .type=0, .num=0};
     Token token = expr[0];
     if(expr[0].type!=TOKEN_NUMERIC){
         RUNTIMEERROR(" Error: only numerics are supported for std 'sleep' function now")
     }
     sleep(SVTOL(expr[0].sv));
+    return ret;
+}
+
+CBReturn cbrstd_random(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
+    (void) expr;
+    (void) call_exprc;
+    (void) variables;
+    (void) depth;
+    CBReturn ret = {.returned=true, .type=TYPE_I32, .num=0};
+    ret.num = random()&0xffffffff;
+    return ret;
 }
 #define STD_CAP 1024
-void (*cbrstd_functions[STD_CAP]) (Token*, size_t, Variables*, size_t);
+CBReturn (*cbrstd_functions[STD_CAP]) (Token*, size_t, Variables*, size_t);
 
 unsigned long char_hash(char *str){
     unsigned long hash = 5381;
@@ -201,16 +222,22 @@ unsigned long char_hash(char *str){
 }
 
 void setup_cbrstd(void){
+    srandom(time(NULL));
     cbrstd_functions[char_hash("print") % STD_CAP] = &cbrstd_print;
     cbrstd_functions[char_hash("dprint") % STD_CAP] = &cbrstd_dprint;
     cbrstd_functions[char_hash("readlnTo") % STD_CAP] = &cbrstd_readlnTo;
     cbrstd_functions[char_hash("readTo") % STD_CAP] = &cbrstd_readTo;
     cbrstd_functions[char_hash("sleep") % STD_CAP] = &cbrstd_sleep;
+    cbrstd_functions[char_hash("random") % STD_CAP] = &cbrstd_random;
 }
 
 CBReturn stdcall(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
     size_t i = 0;
     Token token = expr[i];
-    cbrstd_functions[hash(token.sv)%STD_CAP](expr+1, call_exprc-1, variables, depth);
-    return (CBReturn){.returned=false};
+    if(cbrstd_functions[hash(token.sv)%STD_CAP]==NULL){
+        /* printloc(global_location); */
+        logf("Error: unknown stdcall %.*s\n", SVVARG(token.sv));
+        exit(69);
+    }
+    return cbrstd_functions[hash(token.sv)%STD_CAP](expr+1, call_exprc-1, variables, depth);
 }

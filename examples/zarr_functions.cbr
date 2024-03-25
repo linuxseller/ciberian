@@ -38,7 +38,9 @@ fn main() : void {
     a[1]=10;
     a[2]=5;
     a[3]=7;
+    std.print "Calling min\n";
     i8 res = min(a);
+    std.dprint a;
     i8 sm = sum(a);
     std.print "min(" a ")=" res "\n";
     std.print "sum(" a ")=" sm "\n";

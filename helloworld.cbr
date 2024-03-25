@@ -1,0 +1,5 @@
+fn main() : void {
+    i8 newTestVar = 69;
+    i8 newTestVar = 68;
+    std.print "Hello World\n";
+}

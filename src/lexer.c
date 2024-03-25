@@ -20,7 +20,6 @@ void lexer_trim_left(Lexer *this){
 
 void lexer_drop_line(Lexer *this) {
     while(CURR!='\n' && CURR!='\0') {
-        /* printf("dropped: %c\n", CURR); */
         lexer_chop_char(this);
     }
     if (CURR!='\0') {
@@ -34,6 +33,7 @@ Token lexer_next_token(Lexer *this){
     char first_char = CURR;
     while(first_char=='#'){
         lexer_drop_line(this);
+        lexer_trim_left(this);
         first_char = CURR;
     }
     lexer_trim_left(this);
@@ -56,6 +56,12 @@ Token lexer_next_token(Lexer *this){
             token_type = TOKEN_RETURN;
         } else if(SVCMP(sv, "while")==0){
             token_type = TOKEN_WHILE;
+        } else if(SVCMP(sv, "for")==0){
+            token_type = TOKEN_FOR;
+        } else if(SVCMP(sv, "continue")==0){
+            token_type = TOKEN_CONTINUE;
+        } else if(SVCMP(sv, "break")==0){
+            token_type = TOKEN_BREAK;
         } else if(SVCMP(sv, "if")==0){
             token_type = TOKEN_IF;
         } else if(SVCMP(sv, "else")==0){
@@ -108,6 +114,8 @@ Token lexer_next_token(Lexer *this){
             token_type = TOKEN_OP_MINUS; break;
         case '/':
             token_type = TOKEN_OP_DIV; break;
+        case '%':
+            token_type = TOKEN_OP_MOD; break;
         case '*':
             token_type = TOKEN_OP_MUL; break;
         case '<':

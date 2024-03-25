@@ -13,6 +13,7 @@
 #define SVSVCMP(sv, b) strncmp(b.data, sv.data, MAX(sv.size, b.size))
 #define SVVARG(sv) (int)sv.size, sv.data
 #define SVTOL(sv) strtol(sv.data, NULL, 10)
+#define logf printf
 
 #define COLLECT_EXPR(bracketo, bracketc, expr, i){ \
     exprc = 0; \
@@ -51,6 +52,7 @@ enum TypeEnum {
 };
 
 char *TYPE_TO_STR[]={
+    [TYPE_NOT_A_TYPE] = "NOT A TYPE",
     [TYPE_VOID   ] = "void",
     [TYPE_I8     ] = "i8",
     [TYPE_I32    ] = "i32",
@@ -90,6 +92,7 @@ enum TokenEnum {
     TOKEN_OP_DIV,
     TOKEN_OP_PLUS,
     TOKEN_OP_MINUS,
+    TOKEN_OP_MOD,
     TOKEN_OP_MUL,
     TOKEN_OP_LESS,
     TOKEN_OP_GREATER,
@@ -97,6 +100,9 @@ enum TokenEnum {
     TOKEN_IF,
     TOKEN_ELSE,
     TOKEN_WHILE,
+    TOKEN_FOR,
+    TOKEN_CONTINUE,
+    TOKEN_BREAK,
     TOKEN_DOT,
     TOKEN_TRUE,
     TOKEN_FALSE,
@@ -121,6 +127,7 @@ char *TOKEN_TO_STR[] = {
     [TOKEN_OP_DIV       ] = "TOKEN_OP_DIV",
     [TOKEN_OP_PLUS      ] = "TOKEN_OP_PLUS ",
     [TOKEN_OP_MINUS     ] = "TOKEN_OP_MINUS",
+    [TOKEN_OP_MOD       ] = "TOKEN_OP_MOD",
     [TOKEN_OP_MUL       ] = "TOKEN_OP_MUL",
     [TOKEN_OP_LESS      ] = "TOKEN_OP_LESS ",
     [TOKEN_OP_GREATER   ] = "TOKEN_OP_GREATER",
@@ -128,6 +135,7 @@ char *TOKEN_TO_STR[] = {
     [TOKEN_IF           ] = "TOKEN_IF",
     [TOKEN_ELSE         ] = "TOKEN_ELSE",
     [TOKEN_WHILE        ] = "TOKEN_WHILE",
+    [TOKEN_FOR          ] = "TOKEN_FOR",
     [TOKEN_OSQUAR       ] = "TOKEN_OSQUAR",
     [TOKEN_CSQUAR       ] = "TOKEN_CSQUAR",
     [TOKEN_DOT          ] = "TOKEN_DOT",

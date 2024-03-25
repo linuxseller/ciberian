@@ -6,6 +6,7 @@ fn fact(i32 n) : i32 {
 }
 
 fn main() : void {
-    i64 test=fact(5);
+    i32 n = 5;
+    i64 test=fact(n);
     std.dprint test;
 }

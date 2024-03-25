@@ -11,7 +11,6 @@
 #include "functions.h"
 #include "cbrstdlib.c"
 
-#define logf printf
 
 Location global_location;
 
@@ -34,8 +33,23 @@ void debug_variable(Variable variable){
     logf("Varible {\n");
     logf("\tname: %.*s\n", SVVARG(variable.name));
     logf("\ttype: %s\n", TYPE_TO_STR[variable.type]);
-    logf("\tvalue: %zd\n", get_num_value(variable, (Location){0}));
+    if(variable.modifyer==MOD_ARRAY){
+        logf("\tvalue: {");
+        for(size_t i=0; i<variable.size; i++){
+            logf("%zd, ", get_arr_num_value(variable, i));
+        }
+        puts("}");
+    } else {
+        logf("\tvalue: %zd\n", get_num_value(variable, (Location){0}));
+    }
     logf("}\n");
+}
+
+void debug_variables(Variables variables){
+    for(size_t i=0; i<variables.varc; i++){
+        logf("var %zu: ", i);
+        debug_variable(variables.variables[i]);
+    }
 }
 
 void debug_block(CodeBlock block){
@@ -148,7 +162,8 @@ void var_cast(Variable *var, CBReturn src){
     // * mostly, assignation occurs on result of evaluate_expr function, which MUST calculate type of expression
     // * if expression is numeric, that it can be assigned to anything that is not overflow or underflowed
     if(src.type != var->type && src.type!=TYPE_NUMERIC){
-        logf("Error on assignation of '%s %.*s' to type '%s'\n",
+        printloc(global_location);
+        logf(" Error on assignation of '%s %.*s' to type '%s'\n",
                 TYPE_TO_STR[var->type],
                 SVVARG(var->name),
                 TYPE_TO_STR[src.type]);
@@ -349,7 +364,7 @@ Variable get_var_by_name(SView sv, Variables *variables, ssize_t depth){
         }
         depth--;
     }
-    return (Variable){0};
+    return (Variable){.type=TYPE_NOT_A_TYPE};
 }
 
 typedef struct {
@@ -361,8 +376,9 @@ typedef struct {
 } RpnObject;
 
 int OP_PREC[] = {
-    [TOKEN_OP_MUL] = 4,
-    [TOKEN_OP_DIV] = 3,
+    [TOKEN_OP_MUL] = 5,
+    [TOKEN_OP_DIV] = 4,
+    [TOKEN_OP_MOD] = 3,
     [TOKEN_OP_PLUS] = 2,
     [TOKEN_OP_MINUS] = 1,
 };
@@ -409,6 +425,7 @@ CBReturn evaluate_expr(Token *expr, ssize_t expr_size, Variables *variables, siz
             case TOKEN_OP_MUL:
             case TOKEN_OP_PLUS:
             case TOKEN_OP_MINUS:
+            case TOKEN_OP_MOD:
                 while (top > -1 && OP_PREC[stack[top].type] >= OP_PREC[expr[i].type]){
                     postfix[j++] = stack[top--];
                 }
@@ -479,6 +496,9 @@ CBReturn evaluate_expr(Token *expr, ssize_t expr_size, Variables *variables, siz
                 case TOKEN_OP_MUL:
                     stack[top-2].numeric = stack[top-1].numeric * stack[top-2].numeric;
                     break;
+                case TOKEN_OP_MOD:
+                    stack[top-2].numeric = stack[top-2].numeric % stack[top-1].numeric;
+                    break;
                 case TOKEN_OP_DIV:
                     stack[top-2].numeric = stack[top-2].numeric / stack[top-1].numeric;
                     break;
@@ -542,7 +562,167 @@ bool evaluate_bool_expr(Token *expr, ssize_t expr_size, Variables *variables, si
     return false;
 }
 
-
+Variable update_var_from_expr(Token *expr, size_t call_exprc, Variables *variables, size_t depth){
+    (void) call_exprc;
+    // creating new variable
+    Token token=expr[0]; // var type
+    Variable var={0};
+    int i=0;
+    bool new_var=false;
+    if(token_variable_type(token) != TYPE_NOT_A_TYPE){ // if type specified
+        var.type = token_variable_type(token);
+        token    = expr[++i]; // var name
+        global_location = token.loc;
+        for(size_t i = 0; i<variables[depth].varc; i++){
+            if(SVSVCMP(token.sv, variables[depth].variables[i].name) == 0){
+                printf("'%.*s' on depth %zu\n", SVVARG(token.sv), depth);
+                RUNTIMEERROR(" Error: variable exists");
+            }
+        }
+        var.name = token.sv;
+        if(expr[i+1].type != TOKEN_OSQUAR){
+            if(var.type==TYPE_STRING){
+                var.modifyer = MOD_ARRAY;
+                var.ptr = malloc(token.sv.size+1); //TODO: RAM leak?
+            } else {
+                var.modifyer = MOD_NO_MOD;
+                var.ptr = malloc(get_type_size_in_bytes(var.type));
+            }
+        } else { // variable is array
+            token = expr[i++]; // still var name (?)
+            var.modifyer = MOD_ARRAY;
+            Token *expr_start = &expr[++i]; // index expr start
+            global_location = token.loc;
+            size_t exprc=0;
+            COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, expr, i);
+            size_t arrlen = evaluate_expr(expr_start, exprc, variables, depth).num;
+            var.ptr = malloc(get_type_size_in_bytes(var.type)*arrlen);
+            memset(var.ptr, 0, get_type_size_in_bytes(var.type)*arrlen);
+            var.size = arrlen;
+        }
+        new_var = true;
+        if(variables[depth].varc == 0){
+            variables[depth].variables = malloc(sizeof(Variable)*2); // TODO: fox
+        } else {
+            variables[depth].variables =
+                realloc(variables[depth].variables, sizeof(Variable)*(variables[depth].varc+2));
+        }
+        if(var.modifyer == MOD_ARRAY && var.type!=TYPE_STRING){
+            size_t varc = variables[depth].varc;
+            variables[depth].variables[varc] = var;
+            variables[depth].varc++;
+        } // array initialisation not supported for now
+    } else { // if var exists -> just load it
+        var = get_var_by_name(token.sv, variables, depth);
+    }
+    if(expr[i+1].type == TOKEN_OSQUAR && !new_var){ // if square bracket after variable name, then it is acces to array.
+        if(var.modifyer!=MOD_ARRAY){
+            TOKENERROR(" Error: trying to use usual variable as array, expected '[', got ");
+        }
+        token = expr[++i];
+        global_location = token.loc;
+        Token *expr_start = &expr[++i];
+        global_location = token.loc;
+        size_t exprc=0;
+        COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, expr, i);
+        ssize_t arr_index = evaluate_expr(expr_start, exprc, variables, depth).num;
+        void *arr_id_ptr = NULL;
+        if(arr_index>=(ssize_t)var.size || arr_index<0){
+            printloc(token.loc);
+            logf(" Error: array index %zd is out of range [0;%zd)\n", arr_index, var.size);
+            exit(69);
+        }
+        switch(var.type){
+            case TYPE_I8:
+                arr_id_ptr = (int8_t*)var.ptr+arr_index;
+                break;
+            case TYPE_I32:
+                arr_id_ptr = (int32_t*)var.ptr+arr_index;
+                break;
+            case TYPE_I64:
+                arr_id_ptr = (ssize_t*)var.ptr+arr_index;
+                break;
+            default:
+                break;
+        }
+        var = (Variable){.name = var.name, .modifyer = MOD_NO_MOD, .type = var.type, .ptr = arr_id_ptr};
+    }
+    Token op_token = expr[++i];
+    global_location = token.loc;
+    // assignation
+    switch(op_token.type){
+        case TOKEN_EQUAL_SIGN:{
+            token = expr[++i];
+            global_location = token.loc;
+            int expr_size = 0;
+            Token *expr_start = &expr[i];
+            while(token.type != TOKEN_SEMICOLON){
+                token = expr[++i];
+                global_location = token.loc;
+                expr_size++;
+            }
+            CBReturn val = evaluate_expr(expr_start, expr_size, variables, depth);
+            var_cast(&var, val);
+            size_t varc = variables[depth].varc;
+            if(new_var){
+                variables[depth].variables[varc] = var;
+                variables[depth].varc++;
+            }
+            break;
+        }
+        case TOKEN_SEMICOLON:{
+            var_cast(&var, (CBReturn){.type=TYPE_NUMERIC, .num=0});
+            size_t varc = variables[depth].varc;
+            variables[depth].variables[varc] = var;
+            if(new_var){
+                variables[depth].varc++;
+            }
+            break;
+        }
+        default:{
+                token = expr[++i];
+                if(token.type!=TOKEN_EQUAL_SIGN){
+                    TOKENERROR(" Error: expected '=', got ");
+                }
+                int expr_size = 0;
+                Token *expr_start = &expr[i];
+                while(token.type != TOKEN_SEMICOLON){
+                    token = expr[++i];
+                    global_location = token.loc;
+                    expr_size++;
+                }
+                ssize_t val = evaluate_expr(expr_start, expr_size, variables, depth).num;
+                CBReturn tmpret;
+                tmpret.type = TYPE_NUMERIC;
+                switch(op_token.type){
+                case TOKEN_OP_PLUS:
+                    tmpret.num = get_num_value(var, token.loc)+val;
+                    var_cast(&var, tmpret);
+                    break;
+                case TOKEN_OP_MINUS:
+                    tmpret.num = get_num_value(var, token.loc)-val;
+                    var_cast(&var, tmpret);
+                    break;
+                case TOKEN_OP_MUL:
+                    tmpret.num = get_num_value(var, token.loc)*val;
+                    var_cast(&var, tmpret);
+                    break;
+                case TOKEN_OP_DIV:
+                    tmpret.num = get_num_value(var, token.loc)/val;
+                    var_cast(&var, tmpret);
+                    break;
+                default:
+                    TOKENERROR(" Error: expected '=' or ';', got ");
+                }
+                size_t varc = variables[depth].varc;
+                if(new_var){
+                    variables[depth].variables[varc] = var;
+                    variables[depth].varc++;
+                }
+        }
+    }
+    return var;
+}
 
 bool function_return = false;
 CBReturn evaluate_code_block(CodeBlock block){
@@ -550,314 +730,253 @@ CBReturn evaluate_code_block(CodeBlock block){
     for(size_t i = 0; i<block.exprc; i++){
         Token token = block.code[i];
         switch(token.type){
-            case TOKEN_NAME:
-                {
-                    if(token_variable_type(token) != TYPE_NOT_A_TYPE
-                        || get_var_by_name(token.sv, block.variables, block.depth).ptr != NULL){
-                        Variable var = {0};
-                        bool new_var = false;
-                        // creating new variable
-                        if(token_variable_type(token) != TYPE_NOT_A_TYPE){ // if type specified
-                            var.type = token_variable_type(token);
-                            token    = block.code[++i];
-                            global_location = token.loc;
-                            var.name = token.sv;
-                            if(block.code[i+1].type != TOKEN_OSQUAR){
-                                if(var.type==TYPE_STRING){
-                                    var.modifyer = MOD_ARRAY;
-                                    var.ptr = malloc(token.sv.size+1); //TODO: RAM leak?
-                                } else {
-                                    var.modifyer = MOD_NO_MOD;
-                                    var.ptr = malloc(get_type_size_in_bytes(var.type));
-                                }
-                            } else { // variable is array
-                                token = block.code[i++];
-                                var.modifyer = MOD_ARRAY;
-                                Token *expr_start = &block.code[++i];
-                                global_location = token.loc;
-                                size_t exprc=0;
-                                COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, block.code, i);
-                                size_t arrlen = evaluate_expr(expr_start, exprc, block.variables, block.depth).num;
-                                var.ptr = malloc(get_type_size_in_bytes(var.type)*arrlen);
-                                memset(var.ptr, 0, get_type_size_in_bytes(var.type)*arrlen);
-                                var.size = arrlen;
-                            }
-                            new_var = true;
-                            if(block.variables[block.depth].varc == 0){
-                                block.variables[block.depth].variables = malloc(sizeof(Variable)*2); // TODO: fox
-                            } else {
-                                block.variables[block.depth].variables =
-                                    realloc(block.variables[block.depth].variables, sizeof(Variable)*(block.variables[block.depth].varc+2));
-                            }
-                            if(var.modifyer == MOD_ARRAY && var.type!=TYPE_STRING){
-                                size_t varc = block.variables[block.depth].varc;
-                                block.variables[block.depth].variables[varc] = var;
-                                block.variables[block.depth].varc++;
-                            } // array initialisation not supported for now
+            case TOKEN_NAME:{
+                if(token_variable_type(token) != TYPE_NOT_A_TYPE
+                    || get_var_by_name(token.sv, block.variables, block.depth).ptr != NULL){
+                    Token *expr_start = &block.code[i];
+                    size_t exprc=0;
+                    while(token.type!=TOKEN_SEMICOLON){
+                        token = block.code[++i];
+                        exprc++;
+                    }
+
+                    Variable var = update_var_from_expr(expr_start, exprc, block.variables, block.depth); // TODO: check if works
+                    (void)var;
+                } else { // should be function call
+                    bool is_stdcall=false;
+                    if(SVCMP(block.code[i].sv, "std")==0){
+                        if(block.code[i+1].type!=TOKEN_DOT){
+                            token = block.code[i+1];
+                            TOKENERROR("expected '.' after 'std' in stdcall");
                         }
-                        // if var exists -> just load it
-                        else {
-                            var = get_var_by_name(token.sv, block.variables, block.depth);
-                        }
-                        if(block.code[i+1].type == TOKEN_OSQUAR && !new_var){ // if square bracket after variable name, then it is acces to array.
-                            if(var.modifyer!=MOD_ARRAY){
-                                TOKENERROR(" Error: trying to use usual variable as array, expected '[', got ");
-                            }
-                            token = block.code[++i];
-                            global_location = token.loc;
-                            Token *expr_start = &block.code[++i];
-                            global_location = token.loc;
-                            size_t exprc=0;
-                            COLLECT_EXPR(TOKEN_OSQUAR, TOKEN_CSQUAR, block.code, i);
-                            ssize_t arr_index = evaluate_expr(expr_start, exprc, block.variables, block.depth).num;
-                            void *arr_id_ptr = NULL;
-                            if(arr_index>=(ssize_t)var.size || arr_index<0){
-                                printloc(token.loc);
-                                logf(" Error: array index %zd is out of range [0;%zd)\n", arr_index, var.size);
-                                exit(69);
-                            }
-                            switch(var.type){
-                                case TYPE_I8:
-                                    arr_id_ptr = (int8_t*)var.ptr+arr_index;
-                                    break;
-                                case TYPE_I32:
-                                    arr_id_ptr = (int32_t*)var.ptr+arr_index;
-                                    break;
-                                case TYPE_I64:
-                                    arr_id_ptr = (ssize_t*)var.ptr+arr_index;
-                                    break;
-                                default:
-                                    break;
-                            }
-                            var = (Variable){.name = var.name, .modifyer = MOD_NO_MOD, .type = var.type, .ptr = arr_id_ptr};
-                        }
-                        Token op_token = block.code[++i];
+                        i+=2;
+                        is_stdcall = true;
+                    }
+                    Token *expr_start = &block.code[i];
+                    size_t exprc = 0;
+                    while(token.type != TOKEN_SEMICOLON){
+                        token = block.code[++i];
                         global_location = token.loc;
-                        // assignation
-                        switch(op_token.type){
-                            case TOKEN_EQUAL_SIGN:{
-                                token = block.code[++i];
-                                global_location = token.loc;
-                                int expr_size = 0;
-                                Token *expr_start = &block.code[i];
-                                while(token.type != TOKEN_SEMICOLON){
-                                    token = block.code[++i];
-                                    global_location = token.loc;
-                                    expr_size++;
-                                }
-                                CBReturn val = evaluate_expr(expr_start, expr_size, block.variables, block.depth);
-                                var_cast(&var, val);
-                                size_t varc = block.variables[block.depth].varc;
-                                if(new_var){
-                                    block.variables[block.depth].variables[varc] = var;
-                                    block.variables[block.depth].varc++;
-                                }
-                                break;
-                            }
-                            case TOKEN_SEMICOLON:{
-                                var_cast(&var, (CBReturn){.type=TYPE_NUMERIC, .num=0});
-                                size_t varc = block.variables[block.depth].varc;
-                                block.variables[block.depth].variables[varc] = var;
-                                if(new_var){
-                                    block.variables[block.depth].varc++;
-                                }
-                                break;
-                            }
-                            default:{
-                                    token = block.code[++i];
-                                    if(token.type!=TOKEN_EQUAL_SIGN){
-                                        TOKENERROR(" Error: expected '=', got ");
-                                    }
-                                    int expr_size = 0;
-                                    Token *expr_start = &block.code[i];
-                                    while(token.type != TOKEN_SEMICOLON){
-                                        token = block.code[++i];
-                                        global_location = token.loc;
-                                        expr_size++;
-                                    }
-                                    ssize_t val = evaluate_expr(expr_start, expr_size, block.variables, block.depth).num;
-                                    CBReturn tmpret;
-                                    tmpret.type = TYPE_NUMERIC;
-                                    switch(op_token.type){
-                                    case TOKEN_OP_PLUS:
-                                        tmpret.num = get_num_value(var, token.loc)+val;
-                                        var_cast(&var, tmpret);
-                                        break;
-                                    case TOKEN_OP_MINUS:
-                                        tmpret.num = get_num_value(var, token.loc)-val;
-                                        var_cast(&var, tmpret);
-                                        break;
-                                    case TOKEN_OP_MUL:
-                                        tmpret.num = get_num_value(var, token.loc)*val;
-                                        var_cast(&var, tmpret);
-                                        break;
-                                    case TOKEN_OP_DIV:
-                                        tmpret.num = get_num_value(var, token.loc)/val;
-                                        var_cast(&var, tmpret);
-                                        break;
-                                    default:
-                                        TOKENERROR(" Error: expected '=' or ';', got ");
-                                    }
-                                    size_t varc = block.variables[block.depth].varc;
-                                    if(new_var){
-                                        block.variables[block.depth].variables[varc] = var;
-                                        block.variables[block.depth].varc++;
-                                    }
-                            }
-                        }
-                    } else { // should be function call
-                       bool is_stdcall=false;
-                        if(SVCMP(block.code[i].sv, "std")==0){
-                            if(block.code[i+1].type!=TOKEN_DOT){
-                                token = block.code[i+1];
-                                TOKENERROR("expected '.' after 'std' in stdcall");
-                            }
-                            i+=2;
-                            is_stdcall = true;
-                        }
-                        Token *expr_start = &block.code[i];
-                        size_t exprc = 0;
-                        while(token.type != TOKEN_SEMICOLON){
-                            token = block.code[++i];
-                            global_location = token.loc;
-                            exprc++;
-                        }
-                        if(is_stdcall){
-                            stdcall(expr_start, exprc, block.variables, block.depth);
-                        } else {
-                            evaluate_expr(expr_start, exprc, block.variables, block.depth);
+                        exprc++;
+                    }
+                    if(is_stdcall){
+                        stdcall(expr_start, exprc, block.variables, block.depth);
+                    } else {
+                        evaluate_expr(expr_start, exprc, block.variables, block.depth);
+                    }
+                }
+            }break;
+            case TOKEN_IF:{
+                token = block.code[++i];
+                global_location = token.loc;
+                if(token.type != TOKEN_OPAREN){
+                    TOKENERROR(" Error, expected '(', got ");
+                }
+                token = block.code[++i];
+                global_location = token.loc;
+                Token *expr_start = &block.code[i];
+                int exprc = 0;
+                while(token.type != TOKEN_CPAREN){
+                    token = block.code[++i];
+                    global_location = token.loc;
+                    exprc++;
+                }
+                bool if_true = evaluate_bool_expr(expr_start, exprc, block.variables, block.depth);
+                if(!if_true){ // skip if block
+                   for(int depth_level = 0; token.type != TOKEN_CCURLY || depth_level>0;){
+                        token = block.code[++i];
+                        global_location = token.loc;
+                        switch(token.type){
+                            case TOKEN_OCURLY:depth_level++;break;
+                            case TOKEN_CCURLY:depth_level--;break;
+                            default:break;
                         }
                     }
                 }
-                break;
-            case TOKEN_IF:
-                {
-                    token = block.code[++i];
-                    global_location = token.loc;
-                    if(token.type != TOKEN_OPAREN){
-                        TOKENERROR(" Error, expected '(', got ");
+                // if block, else, just code
+                if(if_true || block.code[i+1].type == TOKEN_ELSE){
+                    while(token.type != TOKEN_OCURLY){
+                        token = block.code[++i];
+                        global_location = token.loc;
                     }
                     token = block.code[++i];
                     global_location = token.loc;
                     Token *expr_start = &block.code[i];
                     int exprc = 0;
-                    while(token.type != TOKEN_CPAREN){
+                    for(int depth_level = 1; token.type != TOKEN_CCURLY || depth_level>0;){
                         token = block.code[++i];
                         global_location = token.loc;
                         exprc++;
-                    }
-                    bool if_true = evaluate_bool_expr(expr_start, exprc, block.variables, block.depth);
-                    if(!if_true){ // skip if block
-                       for(int depth_level = 0; token.type != TOKEN_CCURLY || depth_level>0;){
-                            token = block.code[++i];
-                            global_location = token.loc;
-                            switch(token.type){
-                                case TOKEN_OCURLY:depth_level++;break;
-                                case TOKEN_CCURLY:depth_level--;break;
-                                default:break;
-                            }
+                        switch(token.type){
+                            case TOKEN_OCURLY:depth_level++;break;
+                            case TOKEN_CCURLY:depth_level--;break;
+                            default:break;
                         }
                     }
-                    // if block, else, just code
-                    if(if_true || block.code[i+1].type == TOKEN_ELSE){
-                        while(token.type != TOKEN_OCURLY){
+                    // HERE 1
+                    ret = evaluate_code_block(
+                            (CodeBlock){
+                                .code = expr_start,
+                                .exprc = exprc,
+                                .variables = block.variables,
+                                .depth = block.depth+1}
+                                );
+                    if(block.code[i+1].type == TOKEN_ELSE){ // skip else block
+                        while(block.code[i+1].type != TOKEN_CCURLY){
                             token = block.code[++i];
                             global_location = token.loc;
                         }
+                    }
+                    if(ret.returned){
+                        goto eval_ret;
+                    }
+                }
+            }break;
+            case TOKEN_FOR:{
+                token = block.code[++i];
+                global_location = token.loc;
+                if(token.type != TOKEN_OPAREN){
+                    TOKENERROR(" Error, expected '(', got ");
+                }
+                token = block.code[++i];
+                global_location = token.loc;
+                if(token_variable_type(token)==TYPE_NOT_A_TYPE){ // creating type
+                    RUNTIMEERROR(" Error: for loops must initialize variable");
+                }
+                Token *expr_start = &block.code[i];
+                size_t exprc=0;
+                while(token.type!=TOKEN_SEMICOLON){
+                    token = block.code[++i];
+                    global_location = token.loc;
+                    exprc++;
+                }
+                token = block.code[++i]; // consume semicolon
+                exprc++;
+                Variable iterator_variable = update_var_from_expr(expr_start, exprc, block.variables, block.depth+1); // TODO: check if work;
+                (void) iterator_variable;
+                // EDIT FROM HERE
+                Token *for_expr_start = &block.code[i];
+                int for_expr_exprc = 0;
+                while(token.type != TOKEN_SEMICOLON){
+                    token = block.code[++i];
+                    global_location = token.loc;
+                    for_expr_exprc++;
+                }
+                i++; //consume semicolon
+                Token *for_upd_expr_start = &block.code[i];
+                int for_upd_expr_exprc = 0;
+                while(token.type != TOKEN_CPAREN){
+                    token = block.code[++i];
+                    global_location = token.loc;
+                    for_upd_expr_exprc++;
+                }
+                token = block.code[++i];
+                global_location = token.loc;
+                Token *for_block_start = &block.code[++i];
+                global_location = token.loc;
+                bool if_true = evaluate_bool_expr(for_expr_start, for_expr_exprc, block.variables, block.depth+1);
+                if(!if_true){ // skip while block
+                    while(token.type != TOKEN_CCURLY){
                         token = block.code[++i];
                         global_location = token.loc;
-                        Token *expr_start = &block.code[i];
-                        int exprc = 0;
-                        for(int depth_level = 1; token.type != TOKEN_CCURLY || depth_level>0;){
-                            token = block.code[++i];
-                            global_location = token.loc;
-                            exprc++;
-                            switch(token.type){
-                                case TOKEN_OCURLY:depth_level++;break;
-                                case TOKEN_CCURLY:depth_level--;break;
-                                default:break;
-                            }
+                    }
+                }
+                if(if_true){
+                    int exprc = 0;
+                    for(int depth_level = 1; token.type != TOKEN_CCURLY || depth_level>0;){
+                        token = block.code[++i];
+                        global_location = token.loc;
+                        exprc++;
+                        switch(token.type){
+                            case TOKEN_OCURLY:depth_level++;break;
+                            case TOKEN_CCURLY:depth_level--;break;
+                            default:break;
                         }
-                        // HERE 1
+                    }
+                    while(evaluate_bool_expr(for_expr_start, for_expr_exprc, block.variables, block.depth+1)){
                         ret = evaluate_code_block(
                                 (CodeBlock){
-                                    .code = expr_start,
+                                    .code = for_block_start,
                                     .exprc = exprc,
                                     .variables = block.variables,
-                                    .depth = block.depth+1}
-                                    );
-                        if(block.code[i+1].type == TOKEN_ELSE){ // skip else block
-                            while(block.code[i+1].type != TOKEN_CCURLY){
-                                token = block.code[++i];
-                                global_location = token.loc;
-                            }
+                                    .depth = block.depth+2,
+                                    });
+                        evaluate_code_block(
+                                (CodeBlock){
+                                    .code=for_upd_expr_start,
+                                    .exprc=for_upd_expr_exprc,
+                                    .variables=block.variables,
+                                    .depth=block.depth+1});
+                        block.variables[block.depth+2].varc=0;
+                        if(ret.returned){
+                            goto eval_ret;
                         }
+                    }
+                    block.variables[block.depth+1].varc=0;
+                }
+            }break;
+            case TOKEN_CONTINUE:{
+                                    goto eval_ret;
+            }break;
+            case TOKEN_WHILE:{
+                token = block.code[++i];
+                global_location = token.loc;
+                if(token.type != TOKEN_OPAREN){
+                    TOKENERROR(" Error, expected '(', got ");
+                }
+                token = block.code[++i];
+                global_location = token.loc;
+                Token *while_expr_start = &block.code[i];
+                int while_expr_exprc = 0;
+                //COUNT_TOKEN_EXPRC(while_expr_exprc)
+                for(int depth_level=1; token.type != TOKEN_CPAREN||depth_level>0; ){
+                    token = block.code[++i];
+                    global_location = token.loc;
+                    while_expr_exprc++;
+                    switch(token.type){
+                        case TOKEN_OPAREN:depth_level++;break;
+                        case TOKEN_CPAREN:depth_level--;break;
+                        default:break;
+                    }
+                }
+                token = block.code[++i];
+                global_location = token.loc;
+                Token *while_block_start = &block.code[++i];
+                global_location = token.loc;
+                bool if_true = evaluate_bool_expr(while_expr_start, while_expr_exprc, block.variables, block.depth);
+                if(!if_true){ // skip while block
+                    while(token.type != TOKEN_CCURLY){
+                        token = block.code[++i];
+                        global_location = token.loc;
+                    }
+                }
+                if(if_true){
+                    int exprc = 0;
+                    for(int depth_level = 1; token.type != TOKEN_CCURLY || depth_level>0;){
+                        token = block.code[++i];
+                        global_location = token.loc;
+                        exprc++;
+                        switch(token.type){
+                            case TOKEN_OCURLY:depth_level++;break;
+                            case TOKEN_CCURLY:depth_level--;break;
+                            default:break;
+                        }
+                    }
+                    while(evaluate_bool_expr(while_expr_start, while_expr_exprc, block.variables, block.depth)){
+                        ret = evaluate_code_block(
+                                (CodeBlock){
+                                    .code = while_block_start,
+                                    .exprc = exprc,
+                                    .variables = block.variables,
+                                    .depth = block.depth+1,
+                                    });
+                        block.variables[block.depth+1].varc=0;
                         if(ret.returned){
                             goto eval_ret;
                         }
                     }
                 }
-                break;
-            case TOKEN_WHILE:
-                {
-                    token = block.code[++i];
-                    global_location = token.loc;
-                    if(token.type != TOKEN_OPAREN){
-                        TOKENERROR(" Error, expected '(', got ");
-                    }
-                    token = block.code[++i];
-                    global_location = token.loc;
-                    Token *while_expr_start = &block.code[i];
-                    int while_expr_exprc = 0;
-                    //COUNT_TOKEN_EXPRC(while_expr_exprc)
-                    for(int depth_level=1; token.type != TOKEN_CPAREN||depth_level>0; ){
-                        token = block.code[++i];
-                        global_location = token.loc;
-                        while_expr_exprc++;
-                        switch(token.type){
-                            case TOKEN_OPAREN:depth_level++;break;
-                            case TOKEN_CPAREN:depth_level--;break;
-                            default:break;
-                        }
-                    }
-                    token = block.code[++i];
-                    global_location = token.loc;
-                    Token *while_block_start = &block.code[++i];
-                    global_location = token.loc;
-                    bool if_true = evaluate_bool_expr(while_expr_start, while_expr_exprc, block.variables, block.depth);
-                    if(!if_true){ // skip while block
-                        while(token.type != TOKEN_CCURLY){
-                            token = block.code[++i];
-                            global_location = token.loc;
-                        }
-                    }
-                    if(if_true){
-                        int exprc = 0;
-                        for(int depth_level = 1; token.type != TOKEN_CCURLY || depth_level>0;){
-                            token = block.code[++i];
-                            global_location = token.loc;
-                            exprc++;
-                            switch(token.type){
-                                case TOKEN_OCURLY:depth_level++;break;
-                                case TOKEN_CCURLY:depth_level--;break;
-                                default:break;
-                            }
-                        }
-                        while(evaluate_bool_expr(while_expr_start, while_expr_exprc, block.variables, block.depth)){
-                            ret = evaluate_code_block(
-                                    (CodeBlock){
-                                        .code = while_block_start,
-                                        .exprc = exprc,
-                                        .variables = block.variables,
-                                        .depth = block.depth+1,
-                                        });
-                            if(ret.returned){
-                                goto eval_ret;
-                            }
-                        }
-                    }
-                }
-                break;
+            }break;
             case TOKEN_RETURN:
                 function_return=true;
                 token = block.code[++i];
